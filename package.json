@@ -1,0 +1,35 @@
+{
+  "name": "IdeaFlow_Coding_Challenge",
+  "version": "1.0.0",
+  "description": "coding challenge",
+  "main": "index.js",
+  "scripts": {
+    "minify": "uglifyjs js/dist/bundle.js -o js/dist/bundle.min.js",
+    "build": "browserify -d static/js/src/app.jsx -o static/js/dist/bundle.js -t [ babelify --presets [ @babel/preset-env @babel/preset-react ] ]"
+  },
+  "keywords": [],
+  "author": "Jonathan Face",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/cli": "^7.8.4",
+    "@babel/core": "^7.8.4",
+    "@babel/preset-env": "^7.8.4",
+    "@babel/preset-react": "^7.8.3",
+    "babel-preset-env": "^1.7.0",
+    "babelify": "^10.0.0"
+  },
+  "dependencies": {
+    "@babel/plugin-proposal-class-properties": "^7.8.3",
+    "draft-js": "^0.11.4",
+    "react": "^16.12.0",
+    "react-dom": "^16.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jonathanface/jjf.im.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jonathanface/jjf.im/issues"
+  },
+  "homepage": "https://github.com/jonathanface/jjf.im#readme"
+}

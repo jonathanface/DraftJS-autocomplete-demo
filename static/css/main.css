@@ -1,0 +1,31 @@
+body {
+  background-color:#F1F1F1;
+  font-family:'Roboto', sans-serif;
+  font-size:18px;
+  margin:100px auto;
+}
+
+.DraftEditor-root {
+  font-family:'Quicksand', sans-serif;
+  background-color:#efdddd;
+  padding:10px;
+  margin:100px;
+  border-radius:15px;
+  outline:none;
+  font-weight:bold;
+  letter-spacing:1.5px;
+}
+
+.search-and-replace-highlight {
+  color:yellow;
+}
+
+.searchResults {
+  margin-top: -100px;
+  margin-left: 100px;
+}
+.searchResults ul {
+  list-style:none;
+  margin:0px;
+  padding:0px;
+}

@@ -1,0 +1,66 @@
+import React from 'react';
+import ReactDOM from 'react-dom';
+import {Editor, EditorState, ContentState, convertToRaw, SelectionState, Modifier, CompositeDecorator} from 'draft-js';
+
+const names = ['John Smith', 'Jim Avery', 'Jonas Salk'];
+
+export class Main extends React.Component {
+  constructor() {
+    super();
+    const DEFAULT_TEXT = 'Type something...';
+    this.state = {
+      defaultText: DEFAULT_TEXT,
+      search: null,
+      editorState: EditorState.createEmpty()
+    };
+    
+    //this.onChange = editorState => this.setState({editorState});
+  }
+
+
+  generateDecorator = (highlightTerm) => {
+    const regex = new RegExp(highlightTerm, 'g');
+    return new CompositeDecorator([{
+      strategy: (contentBlock, callback) => {
+        if (highlightTerm !== '') {
+          this.findWithRegex(regex, contentBlock, callback);
+        }
+      },
+      component: this.SearchHighlight,
+    }])
+  }
+  
+  SearchHighlight = (props) => (
+    <span className="search-and-replace-highlight">{props.children}</span>
+  );
+  
+  findWithRegex = (regex, contentBlock, callback) => {
+    const text = contentBlock.getText();
+    let matchArr, start, end;
+    while ((matchArr = regex.exec(text)) !== null) {
+      start = matchArr.index;
+      end = start + matchArr[0].length;
+      callback(start, end);
+    }
+  }
+
+  onChange = (editorState) => {
+    /*
+    this.setState({
+      editorState,
+    });*/
+    const search = 'J';
+    this.setState({
+      search,
+      editorState: EditorState.set(this.state.editorState, { decorator: this.generateDecorator(search) }),
+    });
+  }
+
+  render() {
+    return (
+      <div>
+        <Editor placeholder={this.state.defaultText} editorState={this.state.editorState} onChange={this.onChange.bind(this)}/>
+      </div>
+    );
+  }
+}
