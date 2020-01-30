@@ -44,7 +44,9 @@ export class Main extends React.Component {
   }
 
   onChange = (editorState) => {
-    
+    this.setState({
+      editorState:editorState
+    });
     const blocks = convertToRaw(editorState.getCurrentContent()).blocks;
     const text = blocks.map(block => (!block.text.trim() && '\n') || block.text).join('\n');
     if (text[text.length-1] == '@' && !this.state.searchingNames) {
@@ -54,23 +56,22 @@ export class Main extends React.Component {
     }
     if (this.state.searchingNames && text.length) {
       let start = text.lastIndexOf('@')+1;
-      let substr = text.substring(start, text.length);
-      substr = substr.replace(/\s/g, '');
-      let regex = new RegExp('^' + substr, 'i');
+      var substr = text.substring(start, text.length);
+      let nospace = substr.replace(/\s/g, '');
+      let regex = new RegExp('^' + nospace, 'i');
       let matches = [];
-      let index = 0;
       names.forEach(function (name, index) {
         name = name.replace(/\s/g, '');
         let search = regex.exec(name);
         if (search) {
-          console.log();
           matches.push(names[index]);
         }
       });
+      console.log('substr', substr);
+      this.setState({
+        editorState: EditorState.set(editorState, { decorator: this.generateDecorator(regex)}),
+      });
       if (matches.length) {
-        this.setState({
-          editorState: EditorState.set(this.state.editorState, { decorator: this.generateDecorator(regex) }),
-        });
         this.addSelections(matches);
       }
     }
@@ -81,13 +82,10 @@ export class Main extends React.Component {
     <span className="search-and-replace-highlight">{props.children}</span>
   );
 
-  generateDecorator = (highlightTerm) => {
-    const regex = new RegExp(highlightTerm, 'g');
+  generateDecorator = (regex) => {
     return new CompositeDecorator([{
       strategy: (contentBlock, callback) => {
-        if (highlightTerm !== '') {
-          this.findWithRegex(regex, contentBlock, callback);
-        }
+        this.findWithRegex(regex, contentBlock, callback);
       },
       component: this.SearchHighlight,
     }])
@@ -96,6 +94,8 @@ export class Main extends React.Component {
   findWithRegex = (regex, contentBlock, callback) => {
     const text = contentBlock.getText();
     let matchArr, start, end;
+    console.log('searching', text, 'for', regex);
+    console.log(regex.exec(text));
     while ((matchArr = regex.exec(text)) !== null) {
       start = matchArr.index;
       end = start + matchArr[0].length;
