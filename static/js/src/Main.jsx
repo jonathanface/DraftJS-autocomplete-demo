@@ -12,25 +12,6 @@ export class Main extends React.Component {
       editorState: EditorState.createEmpty()
     }
   }
-
-  onChangeSearch = (e) => {
-    const search = e.target.value;
-    console.log('highlighting', search);
-    this.setState({
-      search,
-      editorState: EditorState.set(this.state.editorState, { decorator: this.generateDecorator(search) }),
-    });
-  }
-
-  onChangeReplace = (e) => {
-    this.setState({
-      replace: e.target.value,
-    });
-  }
-
-  onReplace = () => {
-    console.log(`replacing "${this.state.search}" with "${this.state.replace}"`);
-  }
   
   addSelections(matches) {
     document.querySelector('.searchResults').innerHTML = '';
@@ -42,8 +23,13 @@ export class Main extends React.Component {
     });
     document.querySelector('.searchResults').appendChild(ul);
   }
+  
+  clearSelections() {
+    document.querySelector('.searchResults').innerHTML = '';
+  }
 
   onChange = (editorState) => {
+    let self = this;
     this.setState({
       editorState:editorState
     });
@@ -54,52 +40,96 @@ export class Main extends React.Component {
         searchingNames:true
       });
     }
+    console.log('change');
     if (this.state.searchingNames && text.length) {
-      let start = text.lastIndexOf('@')+1;
+      let start = text.lastIndexOf('@');
       var substr = text.substring(start, text.length);
-      let nospace = substr.replace(/\s/g, '');
-      let regex = new RegExp('^' + nospace, 'i');
+      let regex = new RegExp(substr, 'ig');
       let matches = [];
       names.forEach(function (name, index) {
-        name = name.replace(/\s/g, '');
-        let search = regex.exec(name);
+        let search = ('@' + name).match(regex);
         if (search) {
           matches.push(names[index]);
         }
       });
-      console.log('substr', substr);
-      this.setState({
-        editorState: EditorState.set(editorState, { decorator: this.generateDecorator(regex)}),
-      });
       if (matches.length) {
-        this.addSelections(matches);
+        self.addSelections(matches);
+        self.setState({
+          editorState: EditorState.set(editorState, { decorator: self.generateDecorator(substr, self.SearchHighlight, editorState, false)})
+        });
+        return;
+      } else {
+        self.clearSelections();
+        matches = [];
       }
     }
     
   }
 
   SearchHighlight = (props) => (
-    <span className="search-and-replace-highlight">{props.children}</span>
+    <span className="search-highlight">{props.children}</span>
   );
+  
+  NameSpan = (props) => {
+    return (
+      <span {...props} style={styles.found-box}>
+        {props.children}
+      </span>
+    );
+  }
 
-  generateDecorator = (regex) => {
+  generateDecorator = (regex, type, state, finalized) => {
     return new CompositeDecorator([{
       strategy: (contentBlock, callback) => {
-        this.findWithRegex(regex, contentBlock, callback);
+        this.findWithRegex(regex, contentBlock, callback, state, finalized);
       },
-      component: this.SearchHighlight,
+      component: type,
     }])
   }
   
-  findWithRegex = (regex, contentBlock, callback) => {
+  findWithRegex = (regex, contentBlock, callback, state, finalized) => {
+    let self = this;
     const text = contentBlock.getText();
-    let matchArr, start, end;
-    console.log('searching', text, 'for', regex);
-    console.log(regex.exec(text));
-    while ((matchArr = regex.exec(text)) !== null) {
-      start = matchArr.index;
-      end = start + matchArr[0].length;
-      callback(start, end);
+    regex = new RegExp(regex, 'ig');
+    //console.log('searching', text, 'for', regex);
+    let match, start, end;
+    
+    let lastpos = text.lastIndexOf('@');
+    let matchText = '';
+    while ((match = regex.exec(text)) != null) {
+      start = match.index;
+      if (start == lastpos) {
+        names.forEach(function (name, index) {
+          if ('@' + name.toLowerCase() == match[0].toLowerCase()) {
+            matchText = match[0];
+            return;
+          }
+        });
+        callback(start, start + match[0].length);
+        if (matchText.length) {
+          self.setState({
+            searchingNames:false
+          });
+          break;
+        }
+        
+      }
+    }
+    if (matchText.length) {
+      console.log('found', matchText);
+      self.clearSelections();
+      
+      console.log('final pass', finalized);
+      if (!finalized) {
+        console.log('change to blue');
+        /*
+        self.setState({
+          editorState: EditorState.set(state, { decorator: self.generateDecorator(regex, self.NameSpan, state, true)})
+        });
+        */
+        return;
+      }
+      return;
     }
   }
 

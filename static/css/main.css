@@ -16,9 +16,13 @@ body {
   letter-spacing:1.5px;
 }
 
-.search-and-replace-highlight {
+.search-highlight {
   color:yellow;
 }
+.found-box {
+  color:blue;
+}
+
 
 .searchResults {
   margin-top: -100px;
