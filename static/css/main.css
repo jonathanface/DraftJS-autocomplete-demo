@@ -27,6 +27,8 @@ body {
 .searchResults {
   margin-top: -100px;
   margin-left: 100px;
+  position:relative;
+  left:0px;
 }
 .searchResults ul {
   list-style:none;

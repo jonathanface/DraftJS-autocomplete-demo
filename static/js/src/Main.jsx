@@ -14,6 +14,8 @@ export class Main extends React.Component {
   }
   
   addSelections(matches) {
+    
+    
     document.querySelector('.searchResults').innerHTML = '';
     let ul = document.createElement('ul');
     matches.forEach(match => {
@@ -22,6 +24,11 @@ export class Main extends React.Component {
       ul.appendChild(li);
     });
     document.querySelector('.searchResults').appendChild(ul);
+    let highlight = document.querySelector('.search-highlight');
+    if (highlight) {
+      console.log(highlight.offsetLeft);
+      document.querySelector('.searchResults').style.left = highlight.offsetLeft + 25 + 'px';
+    }
   }
   
   clearSelections() {
@@ -35,15 +42,30 @@ export class Main extends React.Component {
     });
     const blocks = convertToRaw(editorState.getCurrentContent()).blocks;
     const text = blocks.map(block => (!block.text.trim() && '\n') || block.text).join('\n');
-    if (text[text.length-1] == '@' && !this.state.searchingNames) {
+    if (text[text.length-1] == '@') {
       this.setState({
         searchingNames:true
       });
     }
-    console.log('change');
     if (this.state.searchingNames && text.length) {
-      let start = text.lastIndexOf('@');
-      var substr = text.substring(start, text.length);
+      //let start = text.lastIndexOf('@');
+      var selectionState = editorState.getSelection();
+      var anchorKey = selectionState.getFocusKey();
+      var currentContent = editorState.getCurrentContent();
+      var currentContentBlock = currentContent.getBlockForKey(anchorKey);
+      var end = selectionState.getEndOffset();
+      let start;
+      
+      for (let i = end; i >= 0; i--) {
+        if (text[i] == '@') {
+          start = i;
+          break;
+        }
+      }
+      console.log('start', start, end);
+      var substr = currentContentBlock.getText().slice(start, start+end);
+      //var substr = text.substring(start, end);
+      console.log('sub', substr);
       let regex = new RegExp(substr, 'ig');
       let matches = [];
       names.forEach(function (name, index) {
@@ -53,15 +75,28 @@ export class Main extends React.Component {
         }
       });
       if (matches.length) {
-        self.addSelections(matches);
-        self.setState({
-          editorState: EditorState.set(editorState, { decorator: self.generateDecorator(substr, self.SearchHighlight, editorState, false)})
-        });
-        return;
+        if (matches.length == 1 && matches[0].length+1 == end) {
+          self.setState({
+            searchingNames:false,
+            editorState: EditorState.set(editorState, { decorator: self.generateDecorator(start, substr.length, this.FinalizeHighlight)})
+          });
+          self.clearSelections();
+        } else {
+          
+          self.setState({
+            editorState: EditorState.set(editorState, { decorator: self.generateDecorator(start, substr.length, this.SearchHighlight)})
+          }, function() {
+            setTimeout(function() {
+              self.addSelections(matches), 400
+          })
+          });
+          //self.addSelections(matches);
+        }
       } else {
         self.clearSelections();
         matches = [];
       }
+      
     }
     
   }
@@ -69,70 +104,28 @@ export class Main extends React.Component {
   SearchHighlight = (props) => (
     <span className="search-highlight">{props.children}</span>
   );
-  
-  NameSpan = (props) => {
-    return (
-      <span {...props} style={styles.found-box}>
-        {props.children}
-      </span>
-    );
-  }
+  FinalizeHighlight = (props) => (
+    <span className="found-box">{props.children}</span>
+  );
 
-  generateDecorator = (regex, type, state, finalized) => {
+
+  generateDecorator = (start, end, type) => {
     return new CompositeDecorator([{
       strategy: (contentBlock, callback) => {
-        this.findWithRegex(regex, contentBlock, callback, state, finalized);
+        //this.findWithRegex(regex, contentBlock, callback, state, finalized);
+        this.echoBack(start, end, callback);
       },
-      component: type,
+      component: type
     }])
   }
   
-  findWithRegex = (regex, contentBlock, callback, state, finalized) => {
-    let self = this;
-    const text = contentBlock.getText();
-    regex = new RegExp(regex, 'ig');
-    //console.log('searching', text, 'for', regex);
-    let match, start, end;
+  // Pointless but it seems like Draft decorators require a callback
+  echoBack = (start, end, callback) => {
+    console.log('calling back...', start, 'to', start+end);
+    callback(start, start + end);
     
-    let lastpos = text.lastIndexOf('@');
-    let matchText = '';
-    while ((match = regex.exec(text)) != null) {
-      start = match.index;
-      if (start == lastpos) {
-        names.forEach(function (name, index) {
-          if ('@' + name.toLowerCase() == match[0].toLowerCase()) {
-            matchText = match[0];
-            return;
-          }
-        });
-        callback(start, start + match[0].length);
-        if (matchText.length) {
-          self.setState({
-            searchingNames:false
-          });
-          break;
-        }
-        
-      }
-    }
-    if (matchText.length) {
-      console.log('found', matchText);
-      self.clearSelections();
-      
-      console.log('final pass', finalized);
-      if (!finalized) {
-        console.log('change to blue');
-        /*
-        self.setState({
-          editorState: EditorState.set(state, { decorator: self.generateDecorator(regex, self.NameSpan, state, true)})
-        });
-        */
-        return;
-      }
-      return;
-    }
   }
-
+  
   render() {
     return (
       <div>
