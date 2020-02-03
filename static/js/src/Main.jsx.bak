@@ -1,65 +1,172 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import {Editor, EditorState, ContentState, convertToRaw, SelectionState, Modifier, CompositeDecorator} from 'draft-js';
+import { EditorState, Editor, CompositeDecorator, convertToRaw } from 'draft-js';
 
 const names = ['John Smith', 'Jim Avery', 'Jonas Salk'];
+const hashes = ['BlahBlah', 'HappyBirthday', 'Gencon2020'];
+const ideas = ['Technology', 'History', 'Machine Learning'];
 
 export class Main extends React.Component {
-  constructor() {
-    super();
-    const DEFAULT_TEXT = 'Type something...';
+  constructor(props) {
+    super(props);
     this.state = {
-      defaultText: DEFAULT_TEXT,
-      search: null,
+      searchInProgress:false,
+      searchType:null,
+      searchStart:0,
       editorState: EditorState.createEmpty()
-    };
-    
-    //this.onChange = editorState => this.setState({editorState});
-  }
-
-
-  generateDecorator = (highlightTerm) => {
-    const regex = new RegExp(highlightTerm, 'g');
-    return new CompositeDecorator([{
-      strategy: (contentBlock, callback) => {
-        if (highlightTerm !== '') {
-          this.findWithRegex(regex, contentBlock, callback);
-        }
-      },
-      component: this.SearchHighlight,
-    }])
-  }
-  
-  SearchHighlight = (props) => (
-    <span className="search-and-replace-highlight">{props.children}</span>
-  );
-  
-  findWithRegex = (regex, contentBlock, callback) => {
-    const text = contentBlock.getText();
-    let matchArr, start, end;
-    while ((matchArr = regex.exec(text)) !== null) {
-      start = matchArr.index;
-      end = start + matchArr[0].length;
-      callback(start, end);
     }
+  }
+  
+  addSelections(matches) {
+    
+    
+    document.querySelector('.searchResults').innerHTML = '';
+    let ul = document.createElement('ul');
+    matches.forEach(match => {
+      let li = document.createElement('li');
+      li.innerHTML = match;
+      ul.appendChild(li);
+    });
+    document.querySelector('.searchResults').appendChild(ul);
+    let highlight = document.querySelector('.search-highlight');
+    if (highlight) {
+      console.log(highlight.offsetLeft);
+      document.querySelector('.searchResults').style.left = highlight.offsetLeft + 25 + 'px';
+    }
+  }
+  
+  clearSelections() {
+    document.querySelector('.searchResults').innerHTML = '';
   }
 
   onChange = (editorState) => {
-    /*
+    let self = this;
     this.setState({
-      editorState,
-    });*/
-    const search = 'J';
-    this.setState({
-      search,
-      editorState: EditorState.set(this.state.editorState, { decorator: this.generateDecorator(search) }),
+      editorState:editorState
     });
+    const blocks = convertToRaw(editorState.getCurrentContent()).blocks;
+    var selectionState = editorState.getSelection();
+    var focusKey = selectionState.getAnchorKey();
+    var currentContent = editorState.getCurrentContent();
+    var block = currentContent.getBlockForKey(focusKey);
+    const text = block.text;
+    
+    let lastChar = text[selectionState.anchorOffset-1];
+    if (lastChar == '\n') {
+      this.clearSelections();
+      this.setState({
+        searchInProgress:false
+      });
+    }
+    if (lastChar == '@' || lastChar == '#' || (lastChar == '>' && text[selectionState.anchorOffset-2] == '<')) {
+      this.setState({
+        searchInProgress:true,
+        searchStart:text.length
+      });
+      this.clearSelections();
+      switch(lastChar) {
+        case '@':
+          this.setState({
+            searchType:'names'
+          });
+          break;
+        case '#':
+          this.setState({
+            searchType:'hashes'
+          });
+          break;
+        case '>':
+          this.setState({
+            searchType:'ideas'
+          });
+          break;
+      }
+    }
+    if (this.state.searchInProgress && text.length > 1) {
+      let matchAgainst;
+      switch (this.state.searchType) {
+        case 'names':
+          matchAgainst = names;
+          break;
+        case 'hashes':
+          matchAgainst = hashes;
+          break;
+        case 'ideas':
+          matchAgainst = ideas;
+          break;
+      }
+      console.log('st', this.state.searchStart, matchAgainst);
+      let searchSlice = block.getText().slice(this.state.searchStart, this.state.searchStart+selectionState.focusOffset);
+      console.log('search for', searchSlice);
+      let regex = new RegExp('^'+searchSlice, 'ig');
+      let matches = [];
+      matchAgainst.forEach(function (theMatch, index) {
+        let search = theMatch.match(regex);
+        if (search) {
+          matches.push(matchAgainst[index]);
+        }
+      });
+      console.log(matches);
+      if (matches.length) {
+        if (matches.length == 1 && matches[0].length+1 == searchSlice.length) {
+          console.log('match');
+          this.setState({
+            editorState: EditorState.createWithContent(editorState.getCurrentContent(), this.generateDecorator(this.state.searchStart, searchSlice.length, this.FinalizeHighlight))
+          }, function() {
+            this.setState({
+              editorState:EditorState.moveFocusToEnd(this.state.editorState)
+            });
+            this.clearSelections();
+          });
+        } else {
+          this.setState({
+            editorState: EditorState.createWithContent(editorState.getCurrentContent(), this.generateDecorator(this.state.searchStart, searchSlice.length, this.SearchHighlight))
+          }, function() {
+            this.setState({
+              editorState:EditorState.moveFocusToEnd(this.state.editorState)
+            });
+            this.addSelections(matches);
+          });
+        }
+      } else {
+        this.clearSelections();
+      }
+    }
   }
 
+  SearchHighlight = (props) => (
+    <span className="search-highlight">{props.children}</span>
+  );
+  FinalizeHighlight = (props) => (
+    <span className="found-box">{props.children}</span>
+  );
+
+
+  generateDecorator = (start, end, type) => {
+    return new CompositeDecorator([{
+      strategy: (contentBlock, callback) => {
+        //this.findWithRegex(regex, contentBlock, callback, state, finalized);
+        this.echoBack(start, end, callback);
+      },
+      component: type
+    }])
+  }
+  
+  // Pointless but it seems like Draft decorators require a callback
+  echoBack = (start, end, callback) => {
+    console.log('calling back...', start, 'to', start+end);
+    callback(start, start + end);
+    
+  }
+  
   render() {
     return (
       <div>
-        <Editor placeholder={this.state.defaultText} editorState={this.state.editorState} onChange={this.onChange.bind(this)}/>
+        <Editor
+          editorState={this.state.editorState}
+          onChange={this.onChange}
+        />
+        <div className="searchResults"></div>
       </div>
     );
   }
