@@ -16,21 +16,28 @@ body {
   letter-spacing:1.5px;
 }
 
-.handle {
+
+.final {
+  border: 1px solid #333;
+  padding: 4px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 8px;
+  background-color: #F0F0F0;
+  color: gray;
+  margin:10px;
+}
+
+.person {
   color:blue;
-  direction: 'ltr',
-  unicodeBidi: 'bidi-override',
 }
 .hashtag {
   color:green;
 }
-.idea {
+.relation {
   color:yellow;
 }
 
-.final {
-  color:red;
-}
 
 
 .searchResults {

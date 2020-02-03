@@ -4,10 +4,11 @@ import { EditorState, Editor, SelectionState, CompositeDecorator, Modifier } fro
 
 const HANDLE_REGEX = /\@[\w\s]+/gi;
 const HASHTAG_REGEX = /\#[\w\u0590-\u05ff]+/gi;
-const IDEA_REGEX = /\<>[\w\u0590-\u05ff]+/gi;
-const FINALIZE_REGEX = /\%%%[\w\s]+%%%/gi;
+const IDEA_REGEX = /\<>[\w\u0590-\u05ff\s]+/gi;
 
-const names = ['jonas salk', 'jim avery', 'bob jenkins'];
+const names = ['Jonas Salk', 'Jim Avery', 'Bob Jenkins'];
+const hashes = ['BlahBlah', 'HappyBirthday', 'Gencon2020'];
+const relations = ['Technology', 'History', 'Machine Learning'];
 var suggestions = [];
 
 export class Main extends React.Component {
@@ -15,28 +16,38 @@ export class Main extends React.Component {
     super();
     const compositeDecorator = new CompositeDecorator([
       {
-        strategy: this.handleStrategy.bind(this),
-        component: this.HandleSpan,
+        strategy: this.person.bind(this),
+        component: this.PersonSpan,
       },
       {
-        strategy: this.hashtagStrategy.bind(this),
+        strategy: this.hashtag.bind(this),
         component: this.HashtagSpan,
       },
       {
-        strategy: this.ideaStrategy.bind(this),
-        component: this.IdeaSpan,
+        strategy: this.relation.bind(this),
+        component: this.RelationSpan,
       },
       {
-        strategy: this.handleFinalize.bind(this),
-        component: this.FinalizeSpan,
-      },
+				strategy: this.getEntityStrategy('IMMUTABLE_PERSON').bind(this),
+				component: this.FinalizedPersonSpan
+			},
+      {
+				strategy: this.getEntityStrategy('IMMUTABLE_HASHTAG').bind(this),
+				component: this.FinalizedHashtagSpan
+			},
+      {
+				strategy: this.getEntityStrategy('IMMUTABLE_RELATION').bind(this),
+				component: this.FinalizedRelationSpan
+			}
     ]);
 
     this.state = {
       editorState: EditorState.createEmpty(compositeDecorator),
       tagIndex:0,
-      browsingSuggestions:false,
-      currentBlock:null
+      enteringPerson:false,
+      enteringHashtag:false,
+      enteringRelation:false,
+      browsingSuggestions:false
     };
 
     this.focus = () => this.refs.editor.focus();
@@ -89,66 +100,110 @@ export class Main extends React.Component {
         tagIndex:0,
         browsingSuggestions:false
       });
-      this.focus();
-      this.clearSelections();
-      let text = event.target.innerText;
       
+      let text = event.target.innerText;
+      let contentState = this.state.editorState.getCurrentContent();
       let selectionState = this.state.editorState.getSelection();
-      var anchorKey = selectionState.getAnchorKey();
-      var currentContent = this.state.editorState.getCurrentContent();
-      var currentContentBlock = currentContent.getBlockForKey(anchorKey);
-      console.log(anchorKey, currentContent);
-      console.log('curr', currentContent.anchorOffset, currentContentBlock.focusOffset);
-      currentContent = Modifier.replaceText(
-        currentContent,
-        new SelectionState({
-          anchorKey: currentContentBlock.getKey(),
-          anchorOffset: 0,
-          focusKey: currentContentBlock.getKey(),
-          focusOffset: currentContentBlock.text.length
-        }),
-        '%%%'+text+'%%%'
+      const block = contentState.getBlockForKey(selectionState.getAnchorKey());
+      
+      let anchorPoint = 0;
+      let delimiter = '';
+      let immutableType = '';
+      if (this.state.enteringPerson) {
+        immutableType = 'IMMUTABLE_PERSON';
+        delimiter = '@';
+      }
+      if (this.state.enteringHashtag) {
+        immutableType = 'IMMUTABLE_HASHTAG';
+        delimiter = '#';
+      }
+      if (this.state.enteringRelation) {
+        immutableType = 'IMMUTABLE_RELATION';
+        delimiter = '>';
+      }
+      for (let i=selectionState.focusOffset; i >=0; i--) {
+        if (block.text[i] == delimiter) {
+          if (this.state.enteringRelation) {
+            if (block.text[i-1] == '<') {
+              anchorPoint = i-1;
+            }
+          } else {
+            anchorPoint = i;
+          }
+        }
+      }
+
+      let newSelectionState = new SelectionState({
+        anchorKey: block.getKey(),
+        anchorOffset: anchorPoint,
+        focusKey: block.getKey(),
+        focusOffset: selectionState.focusOffset,
+      });
+      
+      contentState = Modifier.replaceText(
+        contentState,
+        newSelectionState,
+        text
+      );
+
+      let newBlock = contentState.getBlockForKey(newSelectionState.getAnchorKey());
+      newSelectionState = new SelectionState({
+        anchorKey: newBlock.getKey(),
+        anchorOffset: anchorPoint,
+        focusKey: newBlock.getKey(),
+        focusOffset: anchorPoint + text.length
+      });
+      
+      let newContentState = contentState.createEntity('TOKEN', immutableType, {url:''});
+      const entityKey = contentState.getLastCreatedEntityKey();
+      newContentState = Modifier.applyEntity(
+        newContentState,
+        newSelectionState,
+        entityKey
       );
       this.clearSelections();
       this.setState({
         editorState: EditorState.push(
           this.state.editorState,
-          currentContent,
+          newContentState,
         )
       });
+      
+      const focusSelection = newSelectionState.merge({
+        anchorOffset: anchorPoint + text.length,
+        focusOffset: anchorPoint + text.length,
+      });
+
+      const newEditorState = EditorState.forceSelection(
+        this.state.editorState,
+        focusSelection
+      );
+      this.setState({ editorState: newEditorState });
+      let cs = Modifier.insertText(
+        this.state.editorState.getCurrentContent(),
+        focusSelection,
+        ' '
+      );
+      const spaced = EditorState.push(
+          this.state.editorState,
+          cs,
+          ''
+        );
+      this.setState({ editorState: spaced });
+      this.focus();
     }
   }
 
-  render() {
-    return (
-      <div>
-        <div onClick={this.focus}>
-          <Editor
-            onDownArrow={this.onDownArrow.bind(this)}
-            editorState={this.state.editorState}
-            onChange={this.onChange}
-            placeholder="Write something..."
-            ref="editor"
-            />
-        </div>
-        <div className="searchResults"></div>
-      </div>
-    );
-  }
-  
   handleSuggestionPress(event, block) {
-    console.log('blk', this.state.currentBlock);
     event.preventDefault();
-    console.log('pressed span');
-    console.log('evt', event);
     switch(event.key) {
       case 'ArrowDown':
-      case 'Tab':
         this.onDownArrow(event);
         break;
       case 'ArrowUp':
         this.onUpArrow(event);
         break;
+      case 'Tab':
       case 'Enter':
         this.onEnter(event);
         break;
@@ -156,7 +211,7 @@ export class Main extends React.Component {
   }
   
   addSelections(type) {
-    document.querySelector('.searchResults').innerHTML = '';
+    this.clearSelections();
     let ul = document.createElement('ul');
     let self = this;
     suggestions.forEach(function(match, index) {
@@ -170,6 +225,8 @@ export class Main extends React.Component {
     let highlight = document.querySelector(type);
     if (highlight) {
       document.querySelector('.searchResults').style.left = highlight.offsetLeft + 27 + 'px';
+    } else {
+      document.querySelector('.searchResults').style.left = '27px';
     }
   }
   
@@ -177,44 +234,10 @@ export class Main extends React.Component {
     document.querySelector('.searchResults').innerHTML = '';
   }
   
-  handleFinalize(contentBlock, callback, contentState) {
-    const text = contentBlock.getText();
-    let matchArr, start, end;
-    while ((matchArr = FINALIZE_REGEX.exec(text)) !== null) {
-      start = matchArr.index;
-      end = start + matchArr[0].length;
-    }
-
-    const contentStateWithEntity = contentState.createEntity('LINK', 'IMMUTABLE', {
-      url: 'http://www.zombo.com',
-    });
-    const entityKey = contentStateWithEntity.getLastCreatedEntityKey();
-    const contentStateWithLink = Modifier.applyEntity(
-      contentStateWithEntity,
-      new SelectionState({
-        anchorKey: contentBlock.getKey(),
-        anchorOffset: 0,
-        focusKey: contentBlock.getKey(),
-        focusOffset: 2
-      }),
-      entityKey,
-    );
-    EditorState.push(this.state.editorState, {
-      currentContent: contentStateWithLink,
-    });
-    callback(start, end);
-
-    //this.findWithRegex(FINALIZE_REGEX, contentBlock, callback);
-  }
-  
-  handleStrategy(contentBlock, callback, contentState) {
+  person(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
     let textSlice = '';
-    this.setState({
-      suggestions:[],
-      tagIndex:0
-    });
     let self = this;
     while ((matchArr = HANDLE_REGEX.exec(text)) !== null) {
       start = matchArr.index;
@@ -224,7 +247,6 @@ export class Main extends React.Component {
       
       names.forEach(function (name, index) {
         let search = name.match(regex);
-        console.log(search);
         if (search) {
           matches.push(name);
         }
@@ -232,43 +254,119 @@ export class Main extends React.Component {
     }
     if (matches.length) {
       suggestions = matches;
-      this.setState({
-        currentBlock:contentBlock
-      });
-      this.addSelections('.handle');
+      this.addSelections('.person');
     } else {
-      this.setState({
-        currentBlock:null
-      });
-      this.clearSelections();
+      //this.clearSelections();
     }
-    this.findWithRegex(HANDLE_REGEX, contentBlock, callback);
+    this.findWithRegex(HANDLE_REGEX, contentBlock, callback, 'person');
   }
 
-  hashtagStrategy(contentBlock, callback, contentState) {
-    this.findWithRegex(HASHTAG_REGEX, contentBlock, callback);
-  }
-
-  ideaStrategy(contentBlock, callback, contentState) {
-    this.findWithRegex(IDEA_REGEX, contentBlock, callback);
-  }
-
-
-
-  findWithRegex(regex, contentBlock, callback) {
+  hashtag(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
+    let start, matchArr, matches = [];
+    let textSlice = '';
+    let self = this;
+    while ((matchArr = HASHTAG_REGEX.exec(text)) !== null) {
+      start = matchArr.index;
+      let end = start + matchArr[0].length;
+      textSlice = text.slice(start+1, end);
+      let regex = new RegExp('^'+textSlice, 'ig');
+      
+      hashes.forEach(function (hash, index) {
+        let search = hash.match(regex);
+        if (search) {
+          matches.push(hash);
+        }
+      });
+    }
+    if (matches.length) {
+      suggestions = matches;
+      this.addSelections('.hashtag');
+    } else {
+      //this.clearSelections();
+    }
+    this.findWithRegex(HASHTAG_REGEX, contentBlock, callback, 'hashtag');
+  }
+
+  relation(contentBlock, callback, contentState) {
+    const text = contentBlock.getText();
+    let start, matchArr, matches = [];
+    let textSlice = '';
+    let self = this;
+    while ((matchArr = IDEA_REGEX.exec(text)) !== null) {
+      start = matchArr.index;
+      let end = start + matchArr[0].length;
+      textSlice = text.slice(start+2, end);
+      let regex = new RegExp('^'+textSlice, 'ig');
+      
+      relations.forEach(function (relation, index) {
+        let search = relation.match(regex);
+        if (search) {
+          matches.push(relation);
+        }
+      });
+    }
+    if (matches.length) {
+      suggestions = matches;
+      this.addSelections('.relation');
+    } else {
+      //this.clearSelections();
+    }
+    this.findWithRegex(IDEA_REGEX, contentBlock, callback, 'relation');
+  }
+
+  getEntityStrategy(mutability) {
+    return function(contentBlock, callback, contentState) {
+      contentBlock.findEntityRanges((character) => {
+        const entityKey = character.getEntity();
+        if (entityKey === null) {
+          return false;
+        }
+        return contentState.getEntity(entityKey).getMutability() === mutability;
+      }, callback);
+    };
+  }
+
+  findWithRegex(regex, contentBlock, callback, type) {
+    const text = contentBlock.getText();
+    let self = this;
     let matchArr, start;
     while ((matchArr = regex.exec(text)) !== null) {
       start = matchArr.index;
-      console.log(matchArr);
+      switch(type) {
+        case 'person':
+          self.setState({
+            tagIndex:0,
+            enteringPerson:true,
+            enteringHashtag:false,
+            enteringRelation:false
+          });
+          break;
+        case 'hashtag':
+          self.setState({
+            tagIndex:0,
+            enteringPerson:false,
+            enteringHashtag:true,
+            enteringRelation:false
+          });
+          break;
+        case 'relation':
+          self.setState({
+            tagIndex:0,
+            enteringPerson:false,
+            enteringHashtag:false,
+            enteringRelation:true
+          });
+          break;
+      }
       callback(start, start + matchArr[0].length);
     }
   }
 
-  HandleSpan = (props) => {
+  PersonSpan = (props) => {
     return (
       <span
-        className="handle"
+        className="person"
         data-offset-key={props.offsetKey}
         >
         {props.children}
@@ -287,10 +385,10 @@ export class Main extends React.Component {
     );
   };
 
-  IdeaSpan = (props) => {
+  RelationSpan = (props) => {
     return (
       <span
-        className="idea"
+        className="relation"
         data-offset-key={props.offsetKey}
         >
         {props.children}
@@ -298,10 +396,32 @@ export class Main extends React.Component {
     );
   };
   
-  FinalizeSpan = (props) => {
+  FinalizedPersonSpan = (props) => {
     return (
       <span
-        className="final"
+        className={'final person'}
+        data-offset-key={props.offsetKey}
+        >
+        {props.children}
+      </span>
+    );
+  };
+  
+  FinalizedHashtagSpan = (props) => {
+    return (
+      <span
+        className={'final hashtag'}
+        data-offset-key={props.offsetKey}
+        >
+        {props.children}
+      </span>
+    );
+  };
+  
+  FinalizedRelationSpan = (props) => {
+    return (
+      <span
+        className={'final relation'}
         data-offset-key={props.offsetKey}
         >
         {props.children}
@@ -309,6 +429,22 @@ export class Main extends React.Component {
     );
   };
 
+  render() {
+    return (
+      <div>
+        <div onClick={this.focus}>
+          <Editor
+            onDownArrow={this.onDownArrow.bind(this)}
+            editorState={this.state.editorState}
+            onChange={this.onChange}
+            placeholder="Write something..."
+            ref="editor"
+            />
+        </div>
+        <div className="searchResults"></div>
+      </div>
+    );
+  }
 }
 
 
