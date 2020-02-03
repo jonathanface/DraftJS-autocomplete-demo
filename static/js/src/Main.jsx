@@ -47,7 +47,8 @@ export class Main extends React.Component {
       enteringPerson:false,
       enteringHashtag:false,
       enteringRelation:false,
-      browsingSuggestions:false
+      browsingSuggestions:false,
+      searchCount:0
     };
 
     this.focus = () => this.refs.editor.focus();
@@ -222,12 +223,18 @@ export class Main extends React.Component {
       ul.appendChild(li);
     });
     document.querySelector('.searchResults').appendChild(ul);
-    let highlight = document.querySelector(type);
-    if (highlight) {
-      document.querySelector('.searchResults').style.left = highlight.offsetLeft + 27 + 'px';
-    } else {
-      document.querySelector('.searchResults').style.left = '27px';
-    }
+    
+    let contentState = this.state.editorState.getCurrentContent();
+    let selectionState = this.state.editorState.getSelection();
+    const block = contentState.getBlockForKey(selectionState.getAnchorKey());
+    setTimeout(function() {
+      let highlight = document.querySelector(type + '[data-offset-key^="' + block.key + '"]');
+      if (highlight) {
+        document.querySelector('.searchResults').style.left = highlight.offsetLeft + 27 + 'px';
+      } else {
+        document.querySelector('.searchResults').style.left = '27px';
+      }
+    }, 50);
   }
   
   clearSelections() {
@@ -364,9 +371,12 @@ export class Main extends React.Component {
   }
 
   PersonSpan = (props) => {
+    let contentState = this.state.editorState.getCurrentContent();
+    let selectionState = this.state.editorState.getSelection();
+    const block = contentState.getBlockForKey(selectionState.getAnchorKey());
     return (
       <span
-        className="person"
+        className='person'
         data-offset-key={props.offsetKey}
         >
         {props.children}
