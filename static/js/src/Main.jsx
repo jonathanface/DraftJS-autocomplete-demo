@@ -464,6 +464,8 @@ export class Main extends React.Component {
   }
 
   PersonSpan = (props) => {
+    // This is wrong and apt to cause issues later, but right now
+    // it isn't clear to me how to access a decorator's offsetkey
     activeEditingKey = genKey();
     return (
       <span
@@ -477,6 +479,8 @@ export class Main extends React.Component {
   };
 
   HashtagSpan = (props) => {
+    // This is wrong and apt to cause issues later, but right now
+    // it isn't clear to me how to access a decorator's offsetkey
     activeEditingKey = genKey();
     return (
       <span
@@ -490,6 +494,8 @@ export class Main extends React.Component {
   };
 
   RelationSpan = (props) => {
+    // This is wrong and apt to cause issues later, but right now
+    // it isn't clear to me how to access a decorator's offsetkey
     activeEditingKey = genKey();
     return (
       <span
