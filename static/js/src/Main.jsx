@@ -1,15 +1,17 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { EditorState, Editor, SelectionState, CompositeDecorator, Modifier } from 'draft-js';
+import { EditorState, Editor, SelectionState, CompositeDecorator, Modifier, genKey } from 'draft-js';
 
-const HANDLE_REGEX = /\@[\w\s]+/gi;
-const HASHTAG_REGEX = /\#[\w\u0590-\u05ff]+/gi;
-const IDEA_REGEX = /\<>[\w\u0590-\u05ff\s]+/gi;
+const HANDLE_REGEX = /\@\s*[\w\s]+/gi;
+//const HASHTAG_REGEX = /\#\s*[\w\u0590-\u05ff]+/gi;
+const HASHTAG_REGEX = /(^|\B)#(?![0-9_]+\b)([a-zA-Z0-9_]{1,30})(\b|\r)/gi
+const IDEA_REGEX = /\<>\s*[\w\u0590-\u05ff\s]+/gi;
 
 const names = ['Jim Avery', 'Bob Jenkins', 'Jonas Salk', 'Telly Savalas', 'Aaron Sorkin', 'Robert Untermeyer'];
 const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ', '123LetsGo'];
 const relations = ['Archaeology', 'History', 'Machine Learning', 'Politics', 'Programming', 'Zoology'];
 var suggestions = [];
+var activeEditingKey;
 
 export class Main extends React.Component {
   constructor() {
@@ -111,98 +113,110 @@ export class Main extends React.Component {
         tagIndex:0,
         browsingSuggestions:false
       });
-      
-      let text = event.target.innerText;
-      let contentState = this.state.editorState.getCurrentContent();
-      let selectionState = this.state.editorState.getSelection();
-      const block = contentState.getBlockForKey(selectionState.getAnchorKey());
-      
-      let anchorPoint = 0;
-      let delimiter = '';
-      let immutableType = '';
-      if (this.state.enteringPerson) {
-        immutableType = 'IMMUTABLE_PERSON';
-        delimiter = '@';
-      }
-      if (this.state.enteringHashtag) {
-        immutableType = 'IMMUTABLE_HASHTAG';
-        delimiter = '#';
-      }
-      if (this.state.enteringRelation) {
-        immutableType = 'IMMUTABLE_RELATION';
-        delimiter = '>';
-      }
-      for (let i=selectionState.focusOffset; i >=0; i--) {
-        if (block.text[i] == delimiter) {
-          if (this.state.enteringRelation) {
-            if (block.text[i-1] == '<') {
-              anchorPoint = i-1;
-            }
-          } else {
-            anchorPoint = i;
-          }
-        }
-      }
-
-      let newSelectionState = new SelectionState({
-        anchorKey: block.getKey(),
-        anchorOffset: anchorPoint,
-        focusKey: block.getKey(),
-        focusOffset: selectionState.focusOffset,
-      });
-      
-      contentState = Modifier.replaceText(
-        contentState,
-        newSelectionState,
-        text
-      );
-
-      let newBlock = contentState.getBlockForKey(newSelectionState.getAnchorKey());
-      newSelectionState = new SelectionState({
-        anchorKey: newBlock.getKey(),
-        anchorOffset: anchorPoint,
-        focusKey: newBlock.getKey(),
-        focusOffset: anchorPoint + text.length
-      });
-      
-      let newContentState = contentState.createEntity('TOKEN', immutableType, {url:''});
-      const entityKey = contentState.getLastCreatedEntityKey();
-      newContentState = Modifier.applyEntity(
-        newContentState,
-        newSelectionState,
-        entityKey
-      );
-      this.clearSelections();
-      this.setState({
-        editorState: EditorState.push(
-          this.state.editorState,
-          newContentState,
-        )
-      });
-      
-      const focusSelection = newSelectionState.merge({
-        anchorOffset: anchorPoint + text.length,
-        focusOffset: anchorPoint + text.length,
-      });
-
-      const newEditorState = EditorState.forceSelection(
-        this.state.editorState,
-        focusSelection
-      );
-      this.setState({ editorState: newEditorState });
-      let cs = Modifier.insertText(
-        this.state.editorState.getCurrentContent(),
-        focusSelection,
-        ' '
-      );
-      const spaced = EditorState.push(
-          this.state.editorState,
-          cs,
-          ''
-        );
-      this.setState({ editorState: spaced });
-      this.focus();
+      this.finalizeText(event.target.innerText);
     }
+  }
+  
+  finalizeText(text) {
+
+    let contentState = this.state.editorState.getCurrentContent();
+    let selectionState = this.state.editorState.getSelection();
+    const block = contentState.getBlockForKey(selectionState.getAnchorKey());
+    
+    let anchorPoint = 0;
+    let delimiter = '';
+    let immutableType = '';
+    if (this.state.enteringPerson) {
+      immutableType = 'IMMUTABLE_PERSON';
+      delimiter = '@';
+    }
+    if (this.state.enteringHashtag) {
+      immutableType = 'IMMUTABLE_HASHTAG';
+      delimiter = '#';
+    }
+    if (this.state.enteringRelation) {
+      immutableType = 'IMMUTABLE_RELATION';
+      delimiter = '>';
+    }
+    for (let i=selectionState.focusOffset; i >=0; i--) {
+      if (block.text[i] == delimiter) {
+        if (this.state.enteringRelation) {
+          if (block.text[i-1] == '<') {
+            anchorPoint = i-1;
+          }
+        } else {
+          anchorPoint = i;
+        }
+        break;
+      }
+    }
+    let newSelectionState = new SelectionState({
+      anchorKey: block.getKey(),
+      anchorOffset: anchorPoint,
+      focusKey: block.getKey(),
+      focusOffset: selectionState.focusOffset,
+    });
+    
+    contentState = Modifier.replaceText(
+      contentState,
+      newSelectionState,
+      text
+    );
+
+    this.setState({
+      editorState: EditorState.push(
+        this.state.editorState,
+        contentState,
+      )
+    });
+
+    let newBlock = contentState.getBlockForKey(newSelectionState.getAnchorKey());
+    newSelectionState = new SelectionState({
+      anchorKey: newBlock.getKey(),
+      anchorOffset: anchorPoint,
+      focusKey: newBlock.getKey(),
+      focusOffset: anchorPoint + text.length
+    });
+    
+    let newContentState = contentState.createEntity('TOKEN', immutableType, {url:''});
+    const entityKey = contentState.getLastCreatedEntityKey();
+    newContentState = Modifier.applyEntity(
+      newContentState,
+      newSelectionState,
+      entityKey
+    );
+    
+    this.setState({
+      editorState: EditorState.push(
+        this.state.editorState,
+        newContentState,
+      )
+    });
+    
+    const focusSelection = newSelectionState.merge({
+      anchorOffset: anchorPoint + text.length,
+      focusOffset: anchorPoint + text.length,
+    });
+
+    const newEditorState = EditorState.forceSelection(
+      this.state.editorState,
+      focusSelection
+    );
+    this.setState({ editorState: newEditorState });
+    let cs = Modifier.insertText(
+      this.state.editorState.getCurrentContent(),
+      focusSelection,
+      ' '
+    );
+    const spaced = EditorState.push(
+        this.state.editorState,
+        cs,
+        ''
+      );
+    this.setState({ editorState: spaced });
+    this.clearSelections();
+    this.focus();
+    console.log('finalized', text);
   }
 
   handleSuggestionPress(event) {
@@ -244,13 +258,15 @@ export class Main extends React.Component {
     let selectionState = this.state.editorState.getSelection();
     const block = contentState.getBlockForKey(selectionState.getAnchorKey());
     setTimeout(function() {
-      let highlight = document.querySelector(type + '[data-offset-key="' + block.getKey() + '"]');
+      let highlight = document.querySelector(type + '[data-matchkey="' + activeEditingKey + '"]');
       if (highlight) {
         document.querySelector('.searchResults').style.left = highlight.offsetLeft + 27 + 'px';
       } else {
         document.querySelector('.searchResults').style.left = '27px';
       }
-      document.querySelector('.searchResults').style.opacity = 1;
+      setTimeout(function() {
+        document.querySelector('.searchResults').style.opacity = 1;
+      }, 50);
     }, 50);
   }
   
@@ -264,24 +280,40 @@ export class Main extends React.Component {
     let start, matchArr, matches = [];
     let textSlice = '';
     let self = this;
+    let exactMatch = null;
     while ((matchArr = HANDLE_REGEX.exec(text)) !== null) {
       start = matchArr.index;
       let end = start + matchArr[0].length;
-      textSlice = text.slice(start+1, end);
+      textSlice = text.slice(start+1, end).trim();
       let regex = new RegExp('^'+textSlice, 'ig');
       
       names.forEach(function (name, index) {
-        let search = name.match(regex);
-        if (search) {
-          matches.push(name);
+        if (name.toLowerCase() == textSlice.toLowerCase()) {
+          matchArr = null;
+          exactMatch = name;
+        } else {
+          let search = name.match(regex);
+          if (search) {
+            matches.push(name);
+          }
         }
       });
     }
+    if (exactMatch) {
+      //have to delay a bit so onchange can update state
+      setTimeout(function() {
+        self.finalizeText(exactMatch);
+      }, 50);
+      return;
+    }
     if (matches.length) {
+      matches = [...new Set(matches)];
       suggestions = matches;
       this.addSelections('.person');
     } else {
-      this.clearSelections();
+      if (this.state.enteringPerson) {
+        this.clearSelections();
+      }
     }
     this.findWithRegex(HANDLE_REGEX, contentBlock, callback, 'person');
   }
@@ -291,26 +323,44 @@ export class Main extends React.Component {
     let start, matchArr, matches = [];
     let textSlice = '';
     let self = this;
+    let exactMatch = null;
     while ((matchArr = HASHTAG_REGEX.exec(text)) !== null) {
       start = matchArr.index;
-      let end = start + matchArr[0].length;
-      textSlice = text.slice(start+1, end);
+      let end = start + text.length;
+      textSlice = (text.slice(start+1, end)).trimLeft();
+      console.log('checking', textSlice);
       let regex = new RegExp('^'+textSlice, 'ig');
-      
       hashes.forEach(function (hash, index) {
-        let search = hash.match(regex);
-        if (search) {
-          matches.push(hash);
+        if (hash.toLowerCase() == textSlice.toLowerCase()) {
+          matchArr = null;
+          exactMatch = hash;
+        } else {
+          let search = hash.match(regex);
+          if (search) {
+            matches.push(hash);
+          }
         }
       });
     }
+    this.findWithRegex(HASHTAG_REGEX, contentBlock, callback, 'hashtag');
+    if (exactMatch) {
+      //have to delay a bit so onchange can update state
+      setTimeout(function() {
+        self.finalizeText(exactMatch);
+      }, 50);
+      return;
+    }
     if (matches.length) {
+      matches = [...new Set(matches)];
       suggestions = matches;
       this.addSelections('.hashtag');
     } else {
-      //this.clearSelections();
+      if (this.state.enteringHashtag) {
+        console.log('clearing hashes');
+        this.clearSelections();
+      }
     }
-    this.findWithRegex(HASHTAG_REGEX, contentBlock, callback, 'hashtag');
+    
   }
 
   relation(contentBlock, callback, contentState) {
@@ -318,24 +368,39 @@ export class Main extends React.Component {
     let start, matchArr, matches = [];
     let textSlice = '';
     let self = this;
+    let exactMatch = null;
     while ((matchArr = IDEA_REGEX.exec(text)) !== null) {
       start = matchArr.index;
       let end = start + matchArr[0].length;
-      textSlice = text.slice(start+2, end);
+      textSlice = text.slice(start+2, end).trim();
       let regex = new RegExp('^'+textSlice, 'ig');
-      
       relations.forEach(function (relation, index) {
-        let search = relation.match(regex);
-        if (search) {
-          matches.push(relation);
+        if (relation.toLowerCase() == textSlice.toLowerCase()) {
+          matchArr = null;
+          exactMatch = relation;
+        } else {
+          let search = relation.match(regex);
+          if (search) {
+            matches.push(relation);
+          }
         }
       });
     }
+    if (exactMatch) {
+      //have to delay a bit so onchange can update state
+      setTimeout(function() {
+        self.finalizeText(exactMatch);
+      }, 50);
+      return;
+    }
     if (matches.length) {
+      matches = [...new Set(matches)];
       suggestions = matches;
       this.addSelections('.relation');
     } else {
-      //this.clearSelections();
+      if (this.state.enteringRelation) {
+        this.clearSelections();
+      }
     }
     this.findWithRegex(IDEA_REGEX, contentBlock, callback, 'relation');
   }
@@ -386,12 +451,12 @@ export class Main extends React.Component {
   }
 
   PersonSpan = (props) => {
-    let selectionState = this.state.editorState.getSelection();
-    const block = props.contentState.getBlockForKey(selectionState.getAnchorKey());
+    activeEditingKey = genKey();
     return (
       <span
         className='person'
-        data-offset-key={block.getKey()}
+        data-offset-key={props.offsetKey}
+        data-matchkey={activeEditingKey}
         >
         {props.children}
       </span>
@@ -399,12 +464,12 @@ export class Main extends React.Component {
   };
 
   HashtagSpan = (props) => {
-    let selectionState = this.state.editorState.getSelection();
-    const block = props.contentState.getBlockForKey(selectionState.getAnchorKey());
+    activeEditingKey = genKey();
     return (
       <span
         className="hashtag"
-        data-offset-key={block.getKey()}
+        data-offset-key={props.offsetKey}
+        data-matchkey={activeEditingKey}
         >
         {props.children}
       </span>
@@ -412,12 +477,12 @@ export class Main extends React.Component {
   };
 
   RelationSpan = (props) => {
-    let selectionState = this.state.editorState.getSelection();
-    const block = props.contentState.getBlockForKey(selectionState.getAnchorKey());
+    activeEditingKey = genKey();
     return (
       <span
         className="relation"
-        data-offset-key={block.getKey()}
+        data-offset-key={props.offsetKey}
+        data-matchkey={activeEditingKey}
         >
         {props.children}
       </span>

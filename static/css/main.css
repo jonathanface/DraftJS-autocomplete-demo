@@ -46,6 +46,7 @@ body {
   margin-left: 100px;
   position:relative;
   left:0px;
+  top:-15px;
   transition: opacity 0.3s;
   opacity:0;
   overflow: hidden;
@@ -87,4 +88,14 @@ body {
   margin:200px;
   margin-top:100px;
   margin-bottom:0px;
+}
+
+@media only screen and (max-width: 480px) {
+  .DraftEditor-root {
+    margin:10px;
+  }
+  .info {
+    margin:10px;
+    margin-top:10px;
+  }
 }

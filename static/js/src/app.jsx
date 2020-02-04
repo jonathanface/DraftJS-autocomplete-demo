@@ -9,7 +9,7 @@ window.onload = function() {
  
   if (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent)) {
     //window.location = 'https://jjf.im/mobile';
-    return;
+    //return;
   }
   ReactDOM.render(<Main />, root);
 }
