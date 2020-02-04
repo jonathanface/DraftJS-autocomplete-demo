@@ -30,17 +30,17 @@ export class Main extends React.Component {
         component: this.RelationSpan,
       },
       {
-				strategy: this.getEntityStrategy('IMMUTABLE_PERSON').bind(this),
-				component: this.FinalizedPersonSpan
-			},
+        strategy: this.getEntityStrategy('IMMUTABLE_PERSON').bind(this),
+        component: this.FinalizedPersonSpan
+      },
       {
-				strategy: this.getEntityStrategy('IMMUTABLE_HASHTAG').bind(this),
-				component: this.FinalizedHashtagSpan
-			},
+        strategy: this.getEntityStrategy('IMMUTABLE_HASHTAG').bind(this),
+        component: this.FinalizedHashtagSpan
+      },
       {
-				strategy: this.getEntityStrategy('IMMUTABLE_RELATION').bind(this),
-				component: this.FinalizedRelationSpan
-			}
+        strategy: this.getEntityStrategy('IMMUTABLE_RELATION').bind(this),
+        component: this.FinalizedRelationSpan
+      }
     ]);
 
     this.state = {
@@ -59,12 +59,15 @@ export class Main extends React.Component {
   }
   
   componentDidMount() {
-    //document.write(JSON.stringify(names, undefined, 2));
     document.querySelectorAll('.info span')[0].innerHTML = JSON.stringify(names, undefined, 2);
     document.querySelectorAll('.info span')[1].innerHTML = JSON.stringify(hashes, undefined, 2);
     document.querySelectorAll('.info span')[2].innerHTML = JSON.stringify(relations, undefined, 2);
   }
   
+  
+  // If down arrow is pressed, and the list is not being browsed, go to the first option.
+  // If we're at the bottom of the list, return focus to the editor.
+  // Otherwise, jump down the list.
   onDownArrow(event) {
     event.preventDefault();
     if (suggestions.length) {
@@ -84,6 +87,9 @@ export class Main extends React.Component {
     }
   }
   
+  // If up arrow is pressed, and the list is not being browsed, go to the last option.
+  // If we're at the top of the list, return focus to the editor.
+  // Otherwise, jump up the list.
   onUpArrow(event) {
     event.preventDefault();
     if (suggestions.length) {
@@ -106,6 +112,7 @@ export class Main extends React.Component {
     }
   }
   
+  // Handler for both enter and tab keys.
   onEnter(event) {
     event.preventDefault();
     if (this.state.browsingSuggestions) {
@@ -117,12 +124,14 @@ export class Main extends React.Component {
     }
   }
   
+  // User has entered text which matches something in one of our lists.
+  // We will style it and make it immutable.
   finalizeText(text) {
-
     let contentState = this.state.editorState.getCurrentContent();
     let selectionState = this.state.editorState.getSelection();
     const block = contentState.getBlockForKey(selectionState.getAnchorKey());
     
+    // Find the delimiter to use as anchor start point.
     let anchorPoint = 0;
     let delimiter = '';
     let immutableType = '';
@@ -138,6 +147,7 @@ export class Main extends React.Component {
       immutableType = 'IMMUTABLE_RELATION';
       delimiter = '>';
     }
+    // Start at the cursor and loop backwards until we find our delimiter character.
     for (let i=selectionState.focusOffset; i >=0; i--) {
       if (block.text[i] == delimiter) {
         if (this.state.enteringRelation) {
@@ -150,19 +160,19 @@ export class Main extends React.Component {
         break;
       }
     }
+    
+    // Select our range and replace it with the properly formatted text from our list.
     let newSelectionState = new SelectionState({
       anchorKey: block.getKey(),
       anchorOffset: anchorPoint,
       focusKey: block.getKey(),
       focusOffset: selectionState.focusOffset,
     });
-    
     contentState = Modifier.replaceText(
       contentState,
       newSelectionState,
       text
     );
-
     this.setState({
       editorState: EditorState.push(
         this.state.editorState,
@@ -170,6 +180,7 @@ export class Main extends React.Component {
       )
     });
 
+    // Make the formatted text immutable and give it styles.
     let newBlock = contentState.getBlockForKey(newSelectionState.getAnchorKey());
     newSelectionState = new SelectionState({
       anchorKey: newBlock.getKey(),
@@ -177,7 +188,6 @@ export class Main extends React.Component {
       focusKey: newBlock.getKey(),
       focusOffset: anchorPoint + text.length
     });
-    
     let newContentState = contentState.createEntity('TOKEN', immutableType, {url:''});
     const entityKey = contentState.getLastCreatedEntityKey();
     newContentState = Modifier.applyEntity(
@@ -185,19 +195,18 @@ export class Main extends React.Component {
       newSelectionState,
       entityKey
     );
-    
     this.setState({
       editorState: EditorState.push(
         this.state.editorState,
         newContentState,
       )
     });
-    
+
+    // Shift focus to end of our entry, and add a single whitespace.
     const focusSelection = newSelectionState.merge({
       anchorOffset: anchorPoint + text.length,
       focusOffset: anchorPoint + text.length,
     });
-
     const newEditorState = EditorState.forceSelection(
       this.state.editorState,
       focusSelection
@@ -216,9 +225,9 @@ export class Main extends React.Component {
     this.setState({ editorState: spaced });
     this.clearSelections();
     this.focus();
-    console.log('finalized', text);
   }
 
+  // button handlers for the list options
   handleSuggestionPress(event) {
     event.preventDefault();
     switch(event.key) {
@@ -235,8 +244,7 @@ export class Main extends React.Component {
     }
   }
   
- 
-  
+  // Generate the selectable dropdown from the matched user input.
   addSelections(type) {
     this.clearSelections();
     let ul = document.createElement('ul');
@@ -254,9 +262,9 @@ export class Main extends React.Component {
     });
     document.querySelector('.searchResults').appendChild(ul);
     
-    let contentState = this.state.editorState.getCurrentContent();
-    let selectionState = this.state.editorState.getSelection();
-    const block = contentState.getBlockForKey(selectionState.getAnchorKey());
+    // This is a little hacky but you have to delay for both the state to update
+    // and for the list to figure out where it should be placed horizontally.
+    // Otherwise you can see it jerking around on screen. Sure there is a better way.
     setTimeout(function() {
       let highlight = document.querySelector(type + '[data-matchkey="' + activeEditingKey + '"]');
       if (highlight) {
@@ -270,11 +278,13 @@ export class Main extends React.Component {
     }, 50);
   }
   
+  // Remove the list box.
   clearSelections() {
     document.querySelector('.searchResults').innerHTML = '';
     document.querySelector('.searchResults').style.opacity = 0;
   }
   
+  // Matching type person, indicated by @ character.
   person(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
@@ -286,7 +296,6 @@ export class Main extends React.Component {
       let end = start + matchArr[0].length;
       textSlice = text.slice(start+1, end).trim();
       let regex = new RegExp('^'+textSlice, 'ig');
-      
       names.forEach(function (name, index) {
         if (name.toLowerCase() == textSlice.toLowerCase()) {
           matchArr = null;
@@ -299,6 +308,7 @@ export class Main extends React.Component {
         }
       });
     }
+    this.findWithRegex(HANDLE_REGEX, contentBlock, callback, 'person');
     if (exactMatch) {
       //have to delay a bit so onchange can update state
       setTimeout(function() {
@@ -315,9 +325,9 @@ export class Main extends React.Component {
         this.clearSelections();
       }
     }
-    this.findWithRegex(HANDLE_REGEX, contentBlock, callback, 'person');
   }
 
+  // Matching type hashtag indicated by # character.
   hashtag(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
@@ -342,6 +352,7 @@ export class Main extends React.Component {
         }
       });
     }
+    
     this.findWithRegex(HASHTAG_REGEX, contentBlock, callback, 'hashtag');
     if (exactMatch) {
       //have to delay a bit so onchange can update state
@@ -356,13 +367,12 @@ export class Main extends React.Component {
       this.addSelections('.hashtag');
     } else {
       if (this.state.enteringHashtag) {
-        console.log('clearing hashes');
         this.clearSelections();
       }
     }
-    
   }
 
+  // Matching type relation indicated by '<>' characters.
   relation(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
@@ -386,6 +396,8 @@ export class Main extends React.Component {
         }
       });
     }
+    
+    this.findWithRegex(IDEA_REGEX, contentBlock, callback, 'relation');
     if (exactMatch) {
       //have to delay a bit so onchange can update state
       setTimeout(function() {
@@ -405,6 +417,7 @@ export class Main extends React.Component {
     this.findWithRegex(IDEA_REGEX, contentBlock, callback, 'relation');
   }
 
+  // callback to render immutable entities
   getEntityStrategy(mutability) {
     return function(contentBlock, callback, contentState) {
       contentBlock.findEntityRanges((character) => {
