@@ -6,9 +6,9 @@ const HANDLE_REGEX = /\@[\w\s]+/gi;
 const HASHTAG_REGEX = /\#[\w\u0590-\u05ff]+/gi;
 const IDEA_REGEX = /\<>[\w\u0590-\u05ff\s]+/gi;
 
-const names = ['Jonas Salk', 'Jim Avery', 'Bob Jenkins'];
-const hashes = ['BlahBlah', 'HappyBirthday', 'Gencon2020'];
-const relations = ['Technology', 'History', 'Machine Learning'];
+const names = ['Jim Avery', 'Bob Jenkins', 'Jonas Salk', 'Telly Savalas', 'Aaron Sorkin', 'Robert Untermeyer'];
+const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ', '123LetsGo'];
+const relations = ['Archaeology', 'History', 'Machine Learning', 'Politics', 'Programming', 'Zoology'];
 var suggestions = [];
 
 export class Main extends React.Component {
@@ -56,6 +56,13 @@ export class Main extends React.Component {
     
   }
   
+  componentDidMount() {
+    //document.write(JSON.stringify(names, undefined, 2));
+    document.querySelectorAll('.info span')[0].innerHTML = JSON.stringify(names, undefined, 2);
+    document.querySelectorAll('.info span')[1].innerHTML = JSON.stringify(hashes, undefined, 2);
+    document.querySelectorAll('.info span')[2].innerHTML = JSON.stringify(relations, undefined, 2);
+  }
+  
   onDownArrow(event) {
     event.preventDefault();
     if (suggestions.length) {
@@ -78,19 +85,22 @@ export class Main extends React.Component {
   onUpArrow(event) {
     event.preventDefault();
     if (suggestions.length) {
-      this.state.tagIndex-=2;
-      if (this.state.tagIndex < 0) {
-        this.setState({
-          tagIndex:0,
-          browsingSuggestions:false
-        });
-        this.focus();
-        return;
+      if (!this.state.browsingSuggestions) {
+        this.state.tagIndex = suggestions.length-1;
+        this.state.browsingSuggestions = true;
+        let currSpan = document.querySelectorAll('.searchResults li')[this.state.tagIndex];
+        currSpan.focus();
+      } else {
+        if (this.state.tagIndex <= 0) {
+          this.state.tagIndex = 0;
+          this.state.browsingSuggestions = false;
+          this.focus();
+          return;
+        }
+        this.state.tagIndex--;
+        let currSpan = document.querySelectorAll('.searchResults li')[this.state.tagIndex];
+        currSpan.focus();
       }
-      this.state.browsingSuggestions = true;
-      let currSpan = document.querySelectorAll('.searchResults li')[this.state.tagIndex];
-      currSpan.focus();
-      this.state.tagIndex--;
     }
   }
   
@@ -195,7 +205,7 @@ export class Main extends React.Component {
     }
   }
 
-  handleSuggestionPress(event, block) {
+  handleSuggestionPress(event) {
     event.preventDefault();
     switch(event.key) {
       case 'ArrowDown':
@@ -211,6 +221,8 @@ export class Main extends React.Component {
     }
   }
   
+ 
+  
   addSelections(type) {
     this.clearSelections();
     let ul = document.createElement('ul');
@@ -220,6 +232,10 @@ export class Main extends React.Component {
       li.tabIndex = index;
       li.onkeydown = self.handleSuggestionPress.bind(self);
       li.innerHTML = match;
+      li.onclick = function(event) {
+        self.state.browsingSuggestions = true;
+        self.onEnter(event);
+      }
       ul.appendChild(li);
     });
     document.querySelector('.searchResults').appendChild(ul);
@@ -228,17 +244,19 @@ export class Main extends React.Component {
     let selectionState = this.state.editorState.getSelection();
     const block = contentState.getBlockForKey(selectionState.getAnchorKey());
     setTimeout(function() {
-      let highlight = document.querySelector(type + '[data-offset-key^="' + block.key + '"]');
+      let highlight = document.querySelector(type + '[data-offset-key="' + block.getKey() + '"]');
       if (highlight) {
         document.querySelector('.searchResults').style.left = highlight.offsetLeft + 27 + 'px';
       } else {
         document.querySelector('.searchResults').style.left = '27px';
       }
+      document.querySelector('.searchResults').style.opacity = 1;
     }, 50);
   }
   
   clearSelections() {
     document.querySelector('.searchResults').innerHTML = '';
+    document.querySelector('.searchResults').style.opacity = 0;
   }
   
   person(contentBlock, callback, contentState) {
@@ -263,7 +281,7 @@ export class Main extends React.Component {
       suggestions = matches;
       this.addSelections('.person');
     } else {
-      //this.clearSelections();
+      this.clearSelections();
     }
     this.findWithRegex(HANDLE_REGEX, contentBlock, callback, 'person');
   }
@@ -343,7 +361,6 @@ export class Main extends React.Component {
       switch(type) {
         case 'person':
           self.setState({
-            tagIndex:0,
             enteringPerson:true,
             enteringHashtag:false,
             enteringRelation:false
@@ -351,7 +368,6 @@ export class Main extends React.Component {
           break;
         case 'hashtag':
           self.setState({
-            tagIndex:0,
             enteringPerson:false,
             enteringHashtag:true,
             enteringRelation:false
@@ -359,7 +375,6 @@ export class Main extends React.Component {
           break;
         case 'relation':
           self.setState({
-            tagIndex:0,
             enteringPerson:false,
             enteringHashtag:false,
             enteringRelation:true
@@ -371,13 +386,12 @@ export class Main extends React.Component {
   }
 
   PersonSpan = (props) => {
-    let contentState = this.state.editorState.getCurrentContent();
     let selectionState = this.state.editorState.getSelection();
-    const block = contentState.getBlockForKey(selectionState.getAnchorKey());
+    const block = props.contentState.getBlockForKey(selectionState.getAnchorKey());
     return (
       <span
         className='person'
-        data-offset-key={props.offsetKey}
+        data-offset-key={block.getKey()}
         >
         {props.children}
       </span>
@@ -385,10 +399,12 @@ export class Main extends React.Component {
   };
 
   HashtagSpan = (props) => {
+    let selectionState = this.state.editorState.getSelection();
+    const block = props.contentState.getBlockForKey(selectionState.getAnchorKey());
     return (
       <span
         className="hashtag"
-        data-offset-key={props.offsetKey}
+        data-offset-key={block.getKey()}
         >
         {props.children}
       </span>
@@ -396,10 +412,12 @@ export class Main extends React.Component {
   };
 
   RelationSpan = (props) => {
+    let selectionState = this.state.editorState.getSelection();
+    const block = props.contentState.getBlockForKey(selectionState.getAnchorKey());
     return (
       <span
         className="relation"
-        data-offset-key={props.offsetKey}
+        data-offset-key={block.getKey()}
         >
         {props.children}
       </span>
@@ -442,9 +460,11 @@ export class Main extends React.Component {
   render() {
     return (
       <div>
-        <div onClick={this.focus}>
+        
+        <div onClick={this.focus} className="editorContainer">
           <Editor
             onDownArrow={this.onDownArrow.bind(this)}
+            onUpArrow={this.onUpArrow.bind(this)}
             editorState={this.state.editorState}
             onChange={this.onChange}
             placeholder="Write something..."
@@ -452,10 +472,11 @@ export class Main extends React.Component {
             />
         </div>
         <div className="searchResults"></div>
+        <div className="info"><h4>Available Names:</h4><span className="nameDisplay"></span></div>
+        <div className="info"><h4>Available Hashtags:</h4><span className="hashDisplay"></span></div>
+        <div className="info"><h4>Available Relations:</h4><span className="relationsDisplay"></span></div>
       </div>
     );
   }
 }
-
-
 

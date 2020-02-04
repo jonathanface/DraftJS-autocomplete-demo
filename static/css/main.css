@@ -35,7 +35,7 @@ body {
   color:green;
 }
 .relation {
-  color:yellow;
+  color:#b9b93d;
 }
 
 
@@ -45,13 +45,45 @@ body {
   margin-left: 100px;
   position:relative;
   left:0px;
+  transition: opacity 0.3s;
+  opacity:0;
+  overflow: hidden;
 }
 .searchResults ul {
   list-style:none;
   margin:0px;
   padding:0px;
+  display:inline-block;
 }
 
-.searchResults li:focus {
-    color:yellow;
+.searchResults ul li {
+  color: #c3c3c3;
+  font-size: 0.9em;
+  background-color: #48718c;
+  padding: 8px;
+  padding-bottom:4px;
+  padding-top:4px;
+  border: 1px solid #000;
+  border-bottom: none;
+  width:100%;
+}
+.searchResults ul li:last-child {
+  border-bottom:1px solid #000;
+}
+.searchResults li:focus, .searchResults li:hover {
+  color:#FFF;
+  background-color:#636363;
+  outline:none;
+  cursor:pointer;
+}
+
+.editorContainer {
+  margin-bottom:100px;
+
+}
+
+.info {
+  margin:200px;
+  margin-top:100px;
+  margin-bottom:0px;
 }
