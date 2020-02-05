@@ -42,11 +42,10 @@ body {
 
 
 .searchResults {
-  margin-top: -100px;
+  margin-top: -115px;
   margin-left: 100px;
   position:relative;
   left:0px;
-  top:-15px;
   opacity:0;
   overflow: hidden;
 }
@@ -96,5 +95,8 @@ body {
   .info {
     margin:10px;
     margin-top:10px;
+  }
+  .searchResults {
+    margin-left:5px;
   }
 }
