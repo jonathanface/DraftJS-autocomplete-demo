@@ -246,21 +246,36 @@ export class Main extends React.Component {
   
   // Generate the selectable dropdown from the matched user input.
   addSelections(type) {
-    this.clearSelections();
-    let ul = document.createElement('ul');
     let self = this;
-    suggestions.forEach(function(match, index) {
-      let li = document.createElement('li');
-      li.tabIndex = index;
-      li.onkeydown = self.handleSuggestionPress.bind(self);
-      li.innerHTML = match;
-      li.onclick = function(event) {
-        self.state.browsingSuggestions = true;
-        self.onEnter(event);
-      }
-      ul.appendChild(li);
-    });
-    document.querySelector('.searchResults').appendChild(ul);
+    let ul = document.querySelector('.searchResults ul');
+    if (ul) {
+      ul.innerHTML = '';
+      suggestions.forEach(function(match, index) {
+        let newLI = document.createElement('li');
+        newLI.tabIndex = index;
+        newLI.onkeydown = self.handleSuggestionPress.bind(self);
+        newLI.innerHTML = match;
+        newLI.onclick = function(event) {
+          self.state.browsingSuggestions = true;
+          self.onEnter(event);
+        }
+        ul.appendChild(newLI);
+      });
+    } else {
+      ul = document.createElement('ul');
+      suggestions.forEach(function(match, index) {
+        let li = document.createElement('li');
+        li.tabIndex = index;
+        li.onkeydown = self.handleSuggestionPress.bind(self);
+        li.innerHTML = match;
+        li.onclick = function(event) {
+          self.state.browsingSuggestions = true;
+          self.onEnter(event);
+        }
+        ul.appendChild(li);
+      });
+      document.querySelector('.searchResults').appendChild(ul);
+    }
     
     // This is a little hacky but you have to delay for both the state to update
     // and for the list to figure out where it should be placed horizontally.
@@ -272,15 +287,13 @@ export class Main extends React.Component {
       } else {
         document.querySelector('.searchResults').style.left = '27px';
       }
-      setTimeout(function() {
-        document.querySelector('.searchResults').style.opacity = 1;
-      }, 50);
+      document.querySelector('.searchResults').style.opacity = 1;
     }, 50);
   }
   
   // Remove the list box.
   clearSelections() {
-    document.querySelector('.searchResults').innerHTML = '';
+    document.querySelector('.searchResults ul').innerHTML = '';
     document.querySelector('.searchResults').style.opacity = 0;
   }
   
@@ -346,6 +359,7 @@ export class Main extends React.Component {
           exactMatch = hash;
         } else {
           let search = hash.match(regex);
+          console.log('search', search);
           if (search) {
             matches.push(hash);
           }
