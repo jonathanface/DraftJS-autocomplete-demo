@@ -2,10 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { EditorState, Editor, SelectionState, CompositeDecorator, Modifier, genKey } from 'draft-js';
 
-const HANDLE_REGEX = /\@\s*[\w\s]+/gi;
-//const HASHTAG_REGEX = /\#\s*[\w\u0590-\u05ff]+/gi;
-const HASHTAG_REGEX = /(^|\B)#(?![0-9_]+\b)([a-zA-Z0-9_]{1,30})(\b|\r)/gi
-const IDEA_REGEX = /\<>\s*[\w\u0590-\u05ff\s]+/gi;
+const HANDLE_REGEX = /@(\w)+\s?(\w)*/gi
+const HASHTAG_REGEX = /#(\w)+/gi
+const IDEA_REGEX = /<>(\w)+\s?(\w)*/gi
 
 const names = ['Jim Avery', 'Bob Jenkins', 'Jonas Salk', 'Telly Savalas', 'Aaron Sorkin', 'Robert Untermeyer'];
 const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ', '123LetsGo'];
@@ -46,9 +45,6 @@ export class Main extends React.Component {
     this.state = {
       editorState: EditorState.createEmpty(compositeDecorator),
       tagIndex:0,
-      enteringPerson:false,
-      enteringHashtag:false,
-      enteringRelation:false,
       browsingSuggestions:false,
       searchCount:0
     };
@@ -120,13 +116,15 @@ export class Main extends React.Component {
         tagIndex:0,
         browsingSuggestions:false
       });
-      this.finalizeText(event.target.innerText);
+      console.log(event.target);
+      this.finalizeText(event.target.innerText, event.target.classList[0]);
     }
   }
   
   // User has entered text which matches something in one of our lists.
   // We will style it and make it immutable.
-  finalizeText(text) {
+  finalizeText(text, type) {
+    console.log('finalizing for', type);
     let contentState = this.state.editorState.getCurrentContent();
     let selectionState = this.state.editorState.getSelection();
     const block = contentState.getBlockForKey(selectionState.getAnchorKey());
@@ -135,22 +133,25 @@ export class Main extends React.Component {
     let anchorPoint = 0;
     let delimiter = '';
     let immutableType = '';
-    if (this.state.enteringPerson) {
-      immutableType = 'IMMUTABLE_PERSON';
-      delimiter = '@';
+    switch(type) {
+      case 'person':
+        immutableType = 'IMMUTABLE_PERSON';
+        delimiter = '@';
+        break;
+      case 'hashtag':
+        immutableType = 'IMMUTABLE_HASHTAG';
+        delimiter = '#';
+        break;
+      case 'relation':
+        immutableType = 'IMMUTABLE_RELATION';
+        delimiter = '>';
+        break;
     }
-    if (this.state.enteringHashtag) {
-      immutableType = 'IMMUTABLE_HASHTAG';
-      delimiter = '#';
-    }
-    if (this.state.enteringRelation) {
-      immutableType = 'IMMUTABLE_RELATION';
-      delimiter = '>';
-    }
+
     // Start at the cursor and loop backwards until we find our delimiter character.
     for (let i=selectionState.focusOffset; i >=0; i--) {
       if (block.text[i] == delimiter) {
-        if (this.state.enteringRelation) {
+        if (type == 'relation') {
           if (block.text[i-1] == '<') {
             anchorPoint = i-1;
           }
@@ -252,6 +253,7 @@ export class Main extends React.Component {
       ul.innerHTML = '';
       suggestions.forEach(function(match, index) {
         let newLI = document.createElement('li');
+        newLI.classList.add(type);
         newLI.tabIndex = index;
         newLI.onkeydown = self.handleSuggestionPress.bind(self);
         newLI.innerHTML = match;
@@ -265,6 +267,7 @@ export class Main extends React.Component {
       ul = document.createElement('ul');
       suggestions.forEach(function(match, index) {
         let li = document.createElement('li');
+        li.classList.add(type);
         li.tabIndex = index;
         li.onkeydown = self.handleSuggestionPress.bind(self);
         li.innerHTML = match;
@@ -276,12 +279,16 @@ export class Main extends React.Component {
       });
       document.querySelector('.searchResults').appendChild(ul);
     }
-    
+    document.querySelector('.searchResults').classList.remove('person');
+    document.querySelector('.searchResults').classList.remove('hashtag');
+    document.querySelector('.searchResults').classList.remove('relation');
+    document.querySelector('.searchResults').classList.add(type);
     // This is a little hacky but you have to delay for both the state to update
     // and for the list to figure out where it should be placed horizontally.
     // Otherwise you can see it jerking around on screen. Sure there is a better way.
     setTimeout(function() {
-      let highlight = document.querySelector(type + '[data-matchkey="' + activeEditingKey + '"]');
+      console.log('key', activeEditingKey);
+      let highlight = document.querySelector('.' + type + '[data-matchkey="' + activeEditingKey + '"]');
       if (highlight) {
         document.querySelector('.searchResults').style.left = highlight.offsetLeft + 27 + 'px';
       } else {
@@ -292,9 +299,13 @@ export class Main extends React.Component {
   }
   
   // Remove the list box.
-  clearSelections() {
-    document.querySelector('.searchResults ul').innerHTML = '';
-    document.querySelector('.searchResults').style.opacity = 0;
+  clearSelections(className) {
+    if (document.querySelector('.searchResults').classList.contains(className)) {
+      if (document.querySelector('.searchResults ul')) {
+        document.querySelector('.searchResults ul').innerHTML = '';
+      }
+      document.querySelector('.searchResults').style.opacity = 0;
+    }
   }
   
   // Matching type person, indicated by @ character.
@@ -309,6 +320,7 @@ export class Main extends React.Component {
       let end = start + matchArr[0].length;
       textSlice = text.slice(start+1, end).trim();
       let regex = new RegExp('^'+textSlice, 'ig');
+      matches = [];
       names.forEach(function (name, index) {
         if (name.toLowerCase() == textSlice.toLowerCase()) {
           matchArr = null;
@@ -321,23 +333,21 @@ export class Main extends React.Component {
         }
       });
     }
-    this.findWithRegex(HANDLE_REGEX, contentBlock, callback, 'person');
+    
     if (exactMatch) {
       //have to delay a bit so onchange can update state
       setTimeout(function() {
-        self.finalizeText(exactMatch);
+        self.finalizeText(exactMatch, 'person');
       }, 50);
       return;
     }
     if (matches.length) {
-      matches = [...new Set(matches)];
-      suggestions = matches;
-      this.addSelections('.person');
+      suggestions = [...new Set(matches)];
+      this.addSelections('person');
     } else {
-      if (this.state.enteringPerson) {
-        this.clearSelections();
-      }
+      this.clearSelections('person');
     }
+    this.findWithRegex(HANDLE_REGEX, contentBlock, callback, 'person');
   }
 
   // Matching type hashtag indicated by # character.
@@ -349,41 +359,36 @@ export class Main extends React.Component {
     let exactMatch = null;
     while ((matchArr = HASHTAG_REGEX.exec(text)) !== null) {
       start = matchArr.index;
-      let end = start + text.length;
-      textSlice = (text.slice(start+1, end)).trimLeft();
-      console.log('checking', textSlice);
+      let end = start + matchArr[0].length;
+      textSlice = text.slice(start+1, end);
       let regex = new RegExp('^'+textSlice, 'ig');
+      matches = [];
       hashes.forEach(function (hash, index) {
         if (hash.toLowerCase() == textSlice.toLowerCase()) {
           matchArr = null;
           exactMatch = hash;
         } else {
           let search = hash.match(regex);
-          console.log('search', search);
           if (search) {
             matches.push(hash);
           }
         }
       });
     }
-    
-    this.findWithRegex(HASHTAG_REGEX, contentBlock, callback, 'hashtag');
     if (exactMatch) {
       //have to delay a bit so onchange can update state
       setTimeout(function() {
-        self.finalizeText(exactMatch);
+        self.finalizeText(exactMatch, 'hashtag');
       }, 50);
       return;
     }
     if (matches.length) {
-      matches = [...new Set(matches)];
-      suggestions = matches;
-      this.addSelections('.hashtag');
+      suggestions = [...new Set(matches)];
+      this.addSelections('hashtag');
     } else {
-      if (this.state.enteringHashtag) {
-        this.clearSelections();
-      }
+      this.clearSelections('hashtag');
     }
+    this.findWithRegex(HASHTAG_REGEX, contentBlock, callback);
   }
 
   // Matching type relation indicated by '<>' characters.
@@ -398,6 +403,7 @@ export class Main extends React.Component {
       let end = start + matchArr[0].length;
       textSlice = text.slice(start+2, end).trim();
       let regex = new RegExp('^'+textSlice, 'ig');
+      matches = [];
       relations.forEach(function (relation, index) {
         if (relation.toLowerCase() == textSlice.toLowerCase()) {
           matchArr = null;
@@ -410,25 +416,21 @@ export class Main extends React.Component {
         }
       });
     }
-    
-    this.findWithRegex(IDEA_REGEX, contentBlock, callback, 'relation');
+
     if (exactMatch) {
       //have to delay a bit so onchange can update state
       setTimeout(function() {
-        self.finalizeText(exactMatch);
+        self.finalizeText(exactMatch, 'relation');
       }, 50);
       return;
     }
     if (matches.length) {
-      matches = [...new Set(matches)];
-      suggestions = matches;
-      this.addSelections('.relation');
+      suggestions = [...new Set(matches)];
+      this.addSelections('relation');
     } else {
-      if (this.state.enteringRelation) {
-        this.clearSelections();
-      }
+      this.clearSelections('relation');
     }
-    this.findWithRegex(IDEA_REGEX, contentBlock, callback, 'relation');
+    this.findWithRegex(IDEA_REGEX, contentBlock, callback);
   }
 
   // callback to render immutable entities
@@ -444,35 +446,12 @@ export class Main extends React.Component {
     };
   }
 
-  findWithRegex(regex, contentBlock, callback, type) {
+  findWithRegex(regex, contentBlock, callback) {
     const text = contentBlock.getText();
     let self = this;
     let matchArr, start;
     while ((matchArr = regex.exec(text)) !== null) {
       start = matchArr.index;
-      switch(type) {
-        case 'person':
-          self.setState({
-            enteringPerson:true,
-            enteringHashtag:false,
-            enteringRelation:false
-          });
-          break;
-        case 'hashtag':
-          self.setState({
-            enteringPerson:false,
-            enteringHashtag:true,
-            enteringRelation:false
-          });
-          break;
-        case 'relation':
-          self.setState({
-            enteringPerson:false,
-            enteringHashtag:false,
-            enteringRelation:true
-          });
-          break;
-      }
       callback(start, start + matchArr[0].length);
     }
   }
