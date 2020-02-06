@@ -2,9 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { EditorState, Editor, SelectionState, CompositeDecorator, Modifier, genKey } from 'draft-js';
 
-const HANDLE_REGEX = /@(\w)+\s?(\w)*/gi
-const HASHTAG_REGEX = /#(\w)+/gi
-const IDEA_REGEX = /<>(\w)+\s?(\w)*/gi
+const HANDLE_REGEX = /@(\w)+(\s)?(\w)*(?!(@#<))/gi
+const HASHTAG_REGEX = /#(\w)+(?!(<#@))*/gi
+const IDEA_REGEX = /<>(\w)+\s?(\w)*(?!(@#<))/gi
 
 const names = ['Jim Avery', 'Bob Jenkins', 'Jonas Salk', 'Telly Savalas', 'Aaron Sorkin', 'Robert Untermeyer'];
 const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ', '123LetsGo'];
@@ -169,10 +169,12 @@ export class Main extends React.Component {
       focusKey: block.getKey(),
       focusOffset: selectionState.focusOffset,
     });
+    
+    //I add space at the beginning to break any preceding regex matches
     contentState = Modifier.replaceText(
       contentState,
       newSelectionState,
-      text
+      text 
     );
     this.setState({
       editorState: EditorState.push(
@@ -189,10 +191,10 @@ export class Main extends React.Component {
       focusKey: newBlock.getKey(),
       focusOffset: anchorPoint + text.length
     });
-    let newContentState = contentState.createEntity('TOKEN', immutableType, {url:''});
-    const entityKey = contentState.getLastCreatedEntityKey();
+    let newContentState = contentState.createEntity('TOKEN', immutableType, {ignored:'true'});
+    const entityKey = newContentState.getLastCreatedEntityKey();
     newContentState = Modifier.applyEntity(
-      newContentState,
+      contentState,
       newSelectionState,
       entityKey
     );
@@ -213,6 +215,7 @@ export class Main extends React.Component {
       focusSelection
     );
     this.setState({ editorState: newEditorState });
+    
     let cs = Modifier.insertText(
       this.state.editorState.getCurrentContent(),
       focusSelection,
@@ -224,7 +227,7 @@ export class Main extends React.Component {
         ''
       );
     this.setState({ editorState: spaced });
-    this.clearSelections();
+    this.clearSelections(type);
     this.focus();
   }
 
@@ -308,129 +311,129 @@ export class Main extends React.Component {
     }
   }
   
+  getSuggestions(contentBlock, contentState, type) {
+    
+    let regex, suggestionsArr, startOffset = 1;
+    switch(type) {
+      case 'person':
+        regex = HANDLE_REGEX;
+        suggestionsArr = names;
+        break;
+      case 'hashtag':
+        regex = HASHTAG_REGEX;
+        suggestionsArr = hashes;
+        break;
+      case 'relation':
+        regex = IDEA_REGEX;
+        suggestionsArr = relations;
+        startOffset = 2;
+        break;
+    }
+    
+    const text = contentBlock.getText();
+    let matchArr, matches = [];
+    while ((matchArr = regex.exec(text)) !== null) {
+      let start = matchArr.index;
+      let end = start + matchArr[0].length;
+      let entpos = this.checkForEntity(contentBlock, contentState, start, end);
+      if (entpos !== null) {
+        end = entpos;
+      }
+      let textSlice = text.slice(start+startOffset, end).trim();
+      let regex = new RegExp('^'+textSlice, 'ig');
+      let exactMatch = null;
+      suggestionsArr.forEach(function (suggestion, index) {
+        if (suggestion.toLowerCase() == textSlice.toLowerCase()) {
+          matchArr = null;
+          exactMatch = suggestion;
+        } else {
+          let search = suggestion.match(regex);
+          if (search) {
+            matches.push(suggestion);
+          }
+        }
+      });
+      if (exactMatch) {
+        return exactMatch;
+      }
+      return matches;
+    }
+    return null;
+  }
+  
   // Matching type person, indicated by @ character.
   person(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
-    let textSlice = '';
     let self = this;
-    let exactMatch = null;
-    while ((matchArr = HANDLE_REGEX.exec(text)) !== null) {
-      start = matchArr.index;
-      let end = start + matchArr[0].length;
-      textSlice = text.slice(start+1, end).trim();
-      let regex = new RegExp('^'+textSlice, 'ig');
-      matches = [];
-      names.forEach(function (name, index) {
-        if (name.toLowerCase() == textSlice.toLowerCase()) {
-          matchArr = null;
-          exactMatch = name;
+    let list = this.getSuggestions(contentBlock, contentState, 'person');
+    if (list) {
+      if (!Array.isArray(list)) {
+        // Text entered is exact match.
+        // Have to delay a bit so onchange can update state.
+        setTimeout(function() {
+          self.finalizeText(list, 'person');
+        }, 50);
+      } else {
+        if (list.length) {
+          suggestions = [...new Set(list)];
+          this.addSelections('person');
         } else {
-          let search = name.match(regex);
-          if (search) {
-            matches.push(name);
-          }
+          this.clearSelections('person');
         }
-      });
+      }
     }
-    
-    if (exactMatch) {
-      //have to delay a bit so onchange can update state
-      setTimeout(function() {
-        self.finalizeText(exactMatch, 'person');
-      }, 50);
-      return;
-    }
-    if (matches.length) {
-      suggestions = [...new Set(matches)];
-      this.addSelections('person');
-    } else {
-      this.clearSelections('person');
-    }
-    this.findWithRegex(HANDLE_REGEX, contentBlock, callback, 'person');
+    this.findWithRegex(HANDLE_REGEX, contentBlock, callback, contentState);
   }
 
   // Matching type hashtag indicated by # character.
   hashtag(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
-    let textSlice = '';
     let self = this;
-    let exactMatch = null;
-    while ((matchArr = HASHTAG_REGEX.exec(text)) !== null) {
-      start = matchArr.index;
-      let end = start + matchArr[0].length;
-      textSlice = text.slice(start+1, end);
-      let regex = new RegExp('^'+textSlice, 'ig');
-      matches = [];
-      hashes.forEach(function (hash, index) {
-        if (hash.toLowerCase() == textSlice.toLowerCase()) {
-          matchArr = null;
-          exactMatch = hash;
+    let list = this.getSuggestions(contentBlock, contentState, 'hashtag');
+    if (list) {
+      if (!Array.isArray(list)) {
+        // Text entered is exact match.
+        // Have to delay a bit so onchange can update state.
+        setTimeout(function() {
+          self.finalizeText(list, 'hashtag');
+        }, 50);
+      } else {
+        if (list.length) {
+          suggestions = [...new Set(list)];
+          this.addSelections('hashtag');
         } else {
-          let search = hash.match(regex);
-          if (search) {
-            matches.push(hash);
-          }
+          this.clearSelections('hashtag');
         }
-      });
+      }
     }
-    if (exactMatch) {
-      //have to delay a bit so onchange can update state
-      setTimeout(function() {
-        self.finalizeText(exactMatch, 'hashtag');
-      }, 50);
-      return;
-    }
-    if (matches.length) {
-      suggestions = [...new Set(matches)];
-      this.addSelections('hashtag');
-    } else {
-      this.clearSelections('hashtag');
-    }
-    this.findWithRegex(HASHTAG_REGEX, contentBlock, callback);
+    this.findWithRegex(HASHTAG_REGEX, contentBlock, callback, contentState);
   }
 
   // Matching type relation indicated by '<>' characters.
   relation(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
-    let textSlice = '';
     let self = this;
-    let exactMatch = null;
-    while ((matchArr = IDEA_REGEX.exec(text)) !== null) {
-      start = matchArr.index;
-      let end = start + matchArr[0].length;
-      textSlice = text.slice(start+2, end).trim();
-      let regex = new RegExp('^'+textSlice, 'ig');
-      matches = [];
-      relations.forEach(function (relation, index) {
-        if (relation.toLowerCase() == textSlice.toLowerCase()) {
-          matchArr = null;
-          exactMatch = relation;
+    let list = this.getSuggestions(contentBlock, contentState, 'relation');
+    if (list) {
+      if (!Array.isArray(list)) {
+        // Text entered is exact match.
+        // Have to delay a bit so onchange can update state.
+        setTimeout(function() {
+          self.finalizeText(list, 'relation');
+        }, 50);
+      } else {
+        if (list.length) {
+          suggestions = [...new Set(list)];
+          this.addSelections('relation');
         } else {
-          let search = relation.match(regex);
-          if (search) {
-            matches.push(relation);
-          }
+          this.clearSelections('relation');
         }
-      });
+      }
     }
-
-    if (exactMatch) {
-      //have to delay a bit so onchange can update state
-      setTimeout(function() {
-        self.finalizeText(exactMatch, 'relation');
-      }, 50);
-      return;
-    }
-    if (matches.length) {
-      suggestions = [...new Set(matches)];
-      this.addSelections('relation');
-    } else {
-      this.clearSelections('relation');
-    }
-    this.findWithRegex(IDEA_REGEX, contentBlock, callback);
+    this.findWithRegex(IDEA_REGEX, contentBlock, callback, contentState);
   }
 
   // callback to render immutable entities
@@ -445,14 +448,35 @@ export class Main extends React.Component {
       }, callback);
     };
   }
+  
+  checkForEntity(contentBlock, contentState, start, end) {
+    let entStart = null;
+    for (let i=start; i < end; i++) {
+      let entKey = contentBlock.getEntityAt(i);
+      if (entKey) {
+        let ent = contentState.getEntity(entKey);
+        if (ent.data.ignored == 'true') {
+          entStart = i;
+          break;
+        }
+      }
+    }
+    return entStart;
+  }
 
-  findWithRegex(regex, contentBlock, callback) {
+  findWithRegex(regex, contentBlock, callback, contentState ) {
     const text = contentBlock.getText();
-    let self = this;
-    let matchArr, start;
-    while ((matchArr = regex.exec(text)) !== null) {
-      start = matchArr.index;
-      callback(start, start + matchArr[0].length);
+    let match;
+    regex = new RegExp(regex);
+    while ((match = regex.exec(text)) !== null) {
+      let start = match.index;
+      let end = start + match[0].length;
+      let entpos = this.checkForEntity(contentBlock, contentState, start, end);
+      if (entpos === null) {
+        callback(start, end);
+      } else {
+        callback(start, entpos);
+      }
     }
   }
 

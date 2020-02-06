@@ -8,8 +8,7 @@ window.onload = function() {
   let root = document.getElementsByTagName(ROOT_ELEMENT)[0];
  
   if (/Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent)) {
-    //window.location = 'https://jjf.im/mobile';
-    //return;
+    //redirect maybe
   }
   ReactDOM.render(<Main />, root);
 }
