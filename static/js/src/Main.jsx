@@ -6,6 +6,10 @@ const HANDLE_REGEX = /@(\w)+(\s)?(\w)*(?!(@#<))/gi
 const HASHTAG_REGEX = /#(\w)+(?!(<#@))*/gi
 const IDEA_REGEX = /<>(\w)+\s?(\w)*(?!(@#<))/gi
 
+const PERSON_TYPE = 'person';
+const HASHTAG_TYPE = 'hashtag';
+const RELATION_TYPE = 'relation';
+
 const names = ['Jim Avery', 'Bob Jenkins', 'Jonas Salk', 'Telly Savalas', 'Aaron Sorkin', 'Robert Untermeyer'];
 const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ', '123LetsGo'];
 const relations = ['Archaeology', 'History', 'Machine Learning', 'Politics', 'Programming', 'Zoology'];
@@ -134,15 +138,15 @@ export class Main extends React.Component {
     let delimiter = '';
     let immutableType = '';
     switch(type) {
-      case 'person':
+      case PERSON_TYPE:
         immutableType = 'IMMUTABLE_PERSON';
         delimiter = '@';
         break;
-      case 'hashtag':
+      case HASHTAG_TYPE:
         immutableType = 'IMMUTABLE_HASHTAG';
         delimiter = '#';
         break;
-      case 'relation':
+      case RELATION_TYPE:
         immutableType = 'IMMUTABLE_RELATION';
         delimiter = '>';
         break;
@@ -151,7 +155,7 @@ export class Main extends React.Component {
     // Start at the cursor and loop backwards until we find our delimiter character.
     for (let i=selectionState.focusOffset; i >=0; i--) {
       if (block.text[i] == delimiter) {
-        if (type == 'relation') {
+        if (type == RELATION_TYPE) {
           if (block.text[i-1] == '<') {
             anchorPoint = i-1;
           }
@@ -282,10 +286,11 @@ export class Main extends React.Component {
       });
       document.querySelector('.searchResults').appendChild(ul);
     }
-    document.querySelector('.searchResults').classList.remove('person');
-    document.querySelector('.searchResults').classList.remove('hashtag');
-    document.querySelector('.searchResults').classList.remove('relation');
+    document.querySelector('.searchResults').classList.remove(PERSON_TYPE);
+    document.querySelector('.searchResults').classList.remove(HASHTAG_TYPE);
+    document.querySelector('.searchResults').classList.remove(RELATION_TYPE);
     document.querySelector('.searchResults').classList.add(type);
+    
     // This is a little hacky but you have to delay for both the state to update
     // and for the list to figure out where it should be placed horizontally.
     // Otherwise you can see it jerking around on screen. Sure there is a better way.
@@ -315,15 +320,15 @@ export class Main extends React.Component {
     
     let regex, suggestionsArr, startOffset = 1;
     switch(type) {
-      case 'person':
+      case PERSON_TYPE:
         regex = HANDLE_REGEX;
         suggestionsArr = names;
         break;
-      case 'hashtag':
+      case HASHTAG_TYPE:
         regex = HASHTAG_REGEX;
         suggestionsArr = hashes;
         break;
-      case 'relation':
+      case RELATION_TYPE:
         regex = IDEA_REGEX;
         suggestionsArr = relations;
         startOffset = 2;
@@ -366,20 +371,20 @@ export class Main extends React.Component {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
     let self = this;
-    let list = this.getSuggestions(contentBlock, contentState, 'person');
+    let list = this.getSuggestions(contentBlock, contentState, PERSON_TYPE);
     if (list) {
       if (!Array.isArray(list)) {
         // Text entered is exact match.
         // Have to delay a bit so onchange can update state.
         setTimeout(function() {
-          self.finalizeText(list, 'person');
+          self.finalizeText(list, PERSON_TYPE);
         }, 50);
       } else {
         if (list.length) {
           suggestions = [...new Set(list)];
-          this.addSelections('person');
+          this.addSelections(PERSON_TYPE);
         } else {
-          this.clearSelections('person');
+          this.clearSelections(PERSON_TYPE);
         }
       }
     }
@@ -391,20 +396,20 @@ export class Main extends React.Component {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
     let self = this;
-    let list = this.getSuggestions(contentBlock, contentState, 'hashtag');
+    let list = this.getSuggestions(contentBlock, contentState, HASHTAG_TYPE);
     if (list) {
       if (!Array.isArray(list)) {
         // Text entered is exact match.
         // Have to delay a bit so onchange can update state.
         setTimeout(function() {
-          self.finalizeText(list, 'hashtag');
+          self.finalizeText(list, HASHTAG_TYPE);
         }, 50);
       } else {
         if (list.length) {
           suggestions = [...new Set(list)];
-          this.addSelections('hashtag');
+          this.addSelections(HASHTAG_TYPE);
         } else {
-          this.clearSelections('hashtag');
+          this.clearSelections(HASHTAG_TYPE);
         }
       }
     }
@@ -416,20 +421,20 @@ export class Main extends React.Component {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
     let self = this;
-    let list = this.getSuggestions(contentBlock, contentState, 'relation');
+    let list = this.getSuggestions(contentBlock, contentState, RELATION_TYPE);
     if (list) {
       if (!Array.isArray(list)) {
         // Text entered is exact match.
         // Have to delay a bit so onchange can update state.
         setTimeout(function() {
-          self.finalizeText(list, 'relation');
+          self.finalizeText(list, RELATION_TYPE);
         }, 50);
       } else {
         if (list.length) {
           suggestions = [...new Set(list)];
-          this.addSelections('relation');
+          this.addSelections(RELATION_TYPE);
         } else {
-          this.clearSelections('relation');
+          this.clearSelections(RELATION_TYPE);
         }
       }
     }
@@ -486,7 +491,7 @@ export class Main extends React.Component {
     activeEditingKey = genKey();
     return (
       <span
-        className='person'
+        className={PERSON_TYPE}
         data-offset-key={props.offsetKey}
         data-matchkey={activeEditingKey}
         >
@@ -501,7 +506,7 @@ export class Main extends React.Component {
     activeEditingKey = genKey();
     return (
       <span
-        className="hashtag"
+        className={HASHTAG_TYPE}
         data-offset-key={props.offsetKey}
         data-matchkey={activeEditingKey}
         >
@@ -516,7 +521,7 @@ export class Main extends React.Component {
     activeEditingKey = genKey();
     return (
       <span
-        className="relation"
+        className={RELATION_TYPE}
         data-offset-key={props.offsetKey}
         data-matchkey={activeEditingKey}
         >
@@ -528,7 +533,7 @@ export class Main extends React.Component {
   FinalizedPersonSpan = (props) => {
     return (
       <span
-        className={'final person'}
+        className={'final ' + PERSON_TYPE}
         data-offset-key={props.offsetKey}
         >
         {props.children}
@@ -539,7 +544,7 @@ export class Main extends React.Component {
   FinalizedHashtagSpan = (props) => {
     return (
       <span
-        className={'final hashtag'}
+        className={'final ' + HASHTAG_TYPE}
         data-offset-key={props.offsetKey}
         >
         {props.children}
@@ -550,7 +555,7 @@ export class Main extends React.Component {
   FinalizedRelationSpan = (props) => {
     return (
       <span
-        className={'final relation'}
+        className={'final ' + RELATION_TYPE}
         data-offset-key={props.offsetKey}
         >
         {props.children}
