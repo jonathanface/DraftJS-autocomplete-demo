@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { EditorState, Editor, SelectionState, CompositeDecorator, Modifier } from 'draft-js';
+import {EditorState, Editor, SelectionState, CompositeDecorator, Modifier} from 'draft-js';
 
 const HANDLE_REGEX = /@(\w)+(\s)?(\w)*(?!(@#<))/gi
 const HASHTAG_REGEX = /#(\w)+(?!(<#@))*/gi
@@ -18,6 +18,20 @@ const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ
 const relations = ['Archaeology', 'History', 'Machine Learning', 'Politics', 'Programming', 'Zoology'];
 var suggestions = [];
 var activeEditingKey;
+var tagIndex=0, browsingSuggestions = false;
+var searchList;
+
+const ListItem = ({ value, onClick }) => (
+  <li onClick={onClick}>{value}</li>
+);
+
+const SearchList = ({ items, onItemClick }) => (
+  <ul ref={searchList} style={{opacity:0}}>
+    {
+      items.map((item, i) => <ListItem key={i} value={item} onClick={onItemClick} />)
+    }
+  </ul>
+);
 
 export class Main extends React.Component {
   constructor() {
@@ -25,39 +39,37 @@ export class Main extends React.Component {
     const compositeDecorator = new CompositeDecorator([
       {
         strategy: this.person.bind(this),
-        component: this.PersonSpan,
+        component: PersonSpan,
       },
       {
         strategy: this.hashtag.bind(this),
-        component: this.HashtagSpan,
+        component: HashtagSpan,
       },
       {
         strategy: this.relation.bind(this),
-        component: this.RelationSpan,
+        component: RelationSpan,
       },
       {
         strategy: this.getEntityStrategy(IMMUTABLE_PERSON_ENTITY).bind(this),
-        component: this.FinalizedPersonSpan
+        component: FinalizedPersonSpan
       },
       {
         strategy: this.getEntityStrategy(IMMUTABLE_HASHTAG_ENTITY).bind(this),
-        component: this.FinalizedHashtagSpan
+        component: FinalizedHashtagSpan
       },
       {
         strategy: this.getEntityStrategy(IMMUTABLE_RELATION_ENTITY).bind(this),
-        component: this.FinalizedRelationSpan
+        component: FinalizedRelationSpan
       }
     ]);
-
     this.state = {
-      editorState: EditorState.createEmpty(compositeDecorator),
-      tagIndex:0,
-      browsingSuggestions:false,
-      searchCount:0
+      editorState: EditorState.createEmpty(compositeDecorator)
     };
 
     this.focus = () => this.refs.editor.focus();
     this.onChange = (editorState) => this.setState({editorState});
+    
+    searchList = React.createRef();
   }
   
   componentDidMount() {
@@ -73,19 +85,16 @@ export class Main extends React.Component {
   onDownArrow(event) {
     event.preventDefault();
     if (suggestions.length) {
-      if (this.state.tagIndex > suggestions.length-1) {
-        this.setState({
-          tagIndex:0,
-          browsingSuggestions:false
-        });
+      if (tagIndex > suggestions.length-1) {
+        tagIndex = 0;
+        browsingSuggestions = false;
         this.focus();
         return;
       }
-      this.state.browsingSuggestions = true;
-      let currSpan = document.querySelectorAll('.searchResults li')[this.state.tagIndex];
+      browsingSuggestions = true;
+      let currSpan = document.querySelectorAll('.searchResults li')[tagIndex];
       currSpan.focus();
-      this.state.tagIndex++;
-      
+      tagIndex++;
     }
   }
   
@@ -95,20 +104,20 @@ export class Main extends React.Component {
   onUpArrow(event) {
     event.preventDefault();
     if (suggestions.length) {
-      if (!this.state.browsingSuggestions) {
-        this.state.tagIndex = suggestions.length-1;
-        this.state.browsingSuggestions = true;
-        let currSpan = document.querySelectorAll('.searchResults li')[this.state.tagIndex];
+      if (!browsingSuggestions) {
+        tagIndex = suggestions.length-1;
+        browsingSuggestions = true;
+        let currSpan = document.querySelectorAll('.searchResults li')[tagIndex];
         currSpan.focus();
       } else {
-        if (this.state.tagIndex <= 0) {
-          this.state.tagIndex = 0;
-          this.state.browsingSuggestions = false;
+        if (tagIndex <= 0) {
+          tagIndex=0;
+          browsingSuggestions = false;
           this.focus();
           return;
         }
-        this.state.tagIndex--;
-        let currSpan = document.querySelectorAll('.searchResults li')[this.state.tagIndex];
+        tagIndex--;
+        let currSpan = document.querySelectorAll('.searchResults li')[tagIndex];
         currSpan.focus();
       }
     }
@@ -117,12 +126,9 @@ export class Main extends React.Component {
   // Handler for both enter and tab keys.
   onEnter(event) {
     event.preventDefault();
-    if (this.state.browsingSuggestions) {
-      this.setState({
-        tagIndex:0,
-        browsingSuggestions:false
-      });
-      console.log(event.target);
+    if (browsingSuggestions) {
+      tagIndex = 0;
+      browsingSuggestions = false;
       this.finalizeText(event.target.innerText, event.target.classList[0]);
     }
   }
@@ -130,7 +136,6 @@ export class Main extends React.Component {
   // User has entered text which matches something in one of our lists.
   // We will style it and make it immutable.
   finalizeText(text, type) {
-    console.log('finalizing for', type);
     let contentState = this.state.editorState.getCurrentContent();
     let selectionState = this.state.editorState.getSelection();
     const block = contentState.getBlockForKey(selectionState.getAnchorKey());
@@ -252,66 +257,39 @@ export class Main extends React.Component {
     }
   }
   
+
+  
   // Generate the selectable dropdown from the matched user input.
   addSelections(type) {
-    let self = this;
-    let ul = document.querySelector('.searchResults ul');
-    if (ul) {
-      ul.innerHTML = '';
-      suggestions.forEach(function(match, index) {
-        let newLI = document.createElement('li');
-        newLI.classList.add(type);
-        newLI.tabIndex = index;
-        newLI.onkeydown = self.handleSuggestionPress.bind(self);
-        newLI.innerHTML = match;
-        newLI.onclick = function(event) {
-          self.state.browsingSuggestions = true;
-          self.onEnter(event);
+    console.log('st', searchList.current);
+    let ul = searchList.current;
+    console.log(ul.style);
+    if (ul.style.opacity == 0) {
+      setTimeout(function() {
+        let highlight = document.querySelector('.' + type + '[data-offset-key="' + activeEditingKey + '"]');
+        console.log('hg', highlight);
+        if (highlight) {
+          console.log(highlight.clientHeight);
+          ul.style.left = highlight.offsetLeft + 27 + 'px';
+          ul.style.top = 100 + highlight.offsetTop + ul.clientHeight + 'px';
+        } else {
+          ul.style.left = '27px';
+          ul.style.top = '0px';
         }
-        ul.appendChild(newLI);
-      });
+        ul.style.opacity = 1;
+      }, 50);
     } else {
-      ul = document.createElement('ul');
-      suggestions.forEach(function(match, index) {
-        let li = document.createElement('li');
-        li.classList.add(type);
-        li.tabIndex = index;
-        li.onkeydown = self.handleSuggestionPress.bind(self);
-        li.innerHTML = match;
-        li.onclick = function(event) {
-          self.state.browsingSuggestions = true;
-          self.onEnter(event);
-        }
-        ul.appendChild(li);
-      });
-      document.querySelector('.searchResults').appendChild(ul);
+      ul.style.opacity = 0;
     }
-    document.querySelector('.searchResults').classList.remove(PERSON_TYPE);
-    document.querySelector('.searchResults').classList.remove(HASHTAG_TYPE);
-    document.querySelector('.searchResults').classList.remove(RELATION_TYPE);
-    document.querySelector('.searchResults').classList.add(type);
-    
-    // This is a little hacky but you have to delay for both the state to update
-    // and for the list to figure out where it should be placed horizontally.
-    // Otherwise you can see it jerking around on screen. Sure there is a better way.
-    setTimeout(function() {
-      let highlight = document.querySelector('.' + type + '[data-offset-key="' + activeEditingKey + '"]');
-      if (highlight) {
-        document.querySelector('.searchResults').style.left = highlight.offsetLeft + 27 + 'px';
-      } else {
-        document.querySelector('.searchResults').style.left = '27px';
-      }
-      document.querySelector('.searchResults').style.opacity = 1;
-    }, 50);
   }
   
   // Remove the list box.
   clearSelections(className) {
-    if (document.querySelector('.searchResults').classList.contains(className)) {
-      if (document.querySelector('.searchResults ul')) {
-        document.querySelector('.searchResults ul').innerHTML = '';
+    if (document.querySelector('ul').classList.contains(className)) {
+      if (document.querySelector('ul')) {
+        document.querySelector('ul').innerHTML = '';
       }
-      document.querySelector('.searchResults').style.opacity = 0;
+      document.querySelector('ul').style.opacity = 0;
     }
   }
   
@@ -484,86 +462,9 @@ export class Main extends React.Component {
     }
   }
 
-  PersonSpan = (props) => {
-    // This is wrong and apt to cause issues later, but right now
-    // it isn't clear to me how to access a decorator's offsetkey
-    activeEditingKey = props.offsetKey;
-    console.log('p', props);
-    return (
-      <span
-        className={PERSON_TYPE}
-        data-offset-key={activeEditingKey}
-        >
-        {props.children}
-      </span>
-    );
-  };
-
-  HashtagSpan = (props) => {
-    // This is wrong and apt to cause issues later, but right now
-    // it isn't clear to me how to access a decorator's offsetkey
-    activeEditingKey = props.offsetKey;
-    return (
-      <span
-        className={HASHTAG_TYPE}
-        data-offset-key={activeEditingKey}
-        >
-        {props.children}
-      </span>
-    );
-  };
-
-  RelationSpan = (props) => {
-    // This is wrong and apt to cause issues later, but right now
-    // it isn't clear to me how to access a decorator's offsetkey
-    activeEditingKey = props.offsetKey;
-    return (
-      <span
-        className={RELATION_TYPE}
-        data-offset-key={activeEditingKey}
-        >
-        {props.children}
-      </span>
-    );
-  };
-  
-  FinalizedPersonSpan = (props) => {
-    return (
-      <span
-        className={'final ' + PERSON_TYPE}
-        data-offset-key={props.offsetKey}
-        >
-        {props.children}
-      </span>
-    );
-  };
-  
-  FinalizedHashtagSpan = (props) => {
-    return (
-      <span
-        className={'final ' + HASHTAG_TYPE}
-        data-offset-key={props.offsetKey}
-        >
-        {props.children}
-      </span>
-    );
-  };
-  
-  FinalizedRelationSpan = (props) => {
-    return (
-      <span
-        className={'final ' + RELATION_TYPE}
-        data-offset-key={props.offsetKey}
-        >
-        {props.children}
-      </span>
-    );
-  };
-
   render() {
     return (
       <div>
-        
         <div onClick={this.focus} className="editorContainer">
           <Editor
             onDownArrow={this.onDownArrow.bind(this)}
@@ -574,12 +475,67 @@ export class Main extends React.Component {
             ref="editor"
             />
         </div>
-        <div className="searchResults"></div>
+        <SearchList items={suggestions} onItemClick={this.handleSuggestionPress.bind(this)}></SearchList>
         <div className="info"><h4>Available Names:</h4><span className="nameDisplay"></span></div>
         <div className="info"><h4>Available Hashtags:</h4><span className="hashDisplay"></span></div>
         <div className="info"><h4>Available Relations:</h4><span className="relationsDisplay"></span></div>
       </div>
     );
   }
+  
+  
 }
 
+
+
+const PersonSpan = props => {
+  activeEditingKey = props.offsetKey;
+  return (
+    <span className={PERSON_TYPE} data-offset-key={activeEditingKey}>
+      {props.children}
+    </span>
+  );
+};
+
+
+const HashtagSpan = props => {
+  activeEditingKey = props.offsetKey;
+  return (
+    <span className={HASHTAG_TYPE} data-offset-key={activeEditingKey}>
+      {props.children}
+    </span>
+  );
+};
+
+const RelationSpan = props => {
+  activeEditingKey = props.offsetKey;
+  return (
+    <span className={RELATION_TYPE} data-offset-key={activeEditingKey}>
+      {props.children}
+    </span>
+  );
+};
+
+const FinalizedPersonSpan = props => {
+  return (
+    <span className={'final ' + PERSON_TYPE}>
+      {props.children}
+    </span>
+  );
+};
+
+const FinalizedHashtagSpan = props => {
+  return (
+    <span className={'final ' + HASHTAG_TYPE}>
+      {props.children}
+    </span>
+  );
+};
+
+const FinalizedRelationSpan = props => {
+  return (
+    <span className={'final ' + RELATION_TYPE}>
+      {props.children}
+    </span>
+  );
+};

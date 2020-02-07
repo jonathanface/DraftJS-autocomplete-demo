@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "minify": "uglifyjs static/js/dist/bundle.js -o static/js/dist/bundle.min.js",
-    "build": "browserify -d static/js/src/app.jsx -o static/js/dist/bundle.js -t [ babelify --presets [ @babel/preset-env @babel/preset-react ] ]"
+    "build": "browserify -d static/js/src/app.jsx static/js/src/Main.jsx -o static/js/dist/bundle.js -t [ babelify --presets [ @babel/preset-env @babel/preset-react ] ]"
   },
   "keywords": [],
   "author": "Jonathan Face",

@@ -4,6 +4,7 @@ import {Main} from './Main.jsx';
 
 const ROOT_ELEMENT = 'main';
 
+
 window.onload = function() {
   let root = document.getElementsByTagName(ROOT_ELEMENT)[0];
  
