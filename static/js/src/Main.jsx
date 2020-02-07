@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { EditorState, Editor, SelectionState, CompositeDecorator, Modifier, genKey } from 'draft-js';
+import { EditorState, Editor, SelectionState, CompositeDecorator, Modifier } from 'draft-js';
 
 const HANDLE_REGEX = /@(\w)+(\s)?(\w)*(?!(@#<))/gi
 const HASHTAG_REGEX = /#(\w)+(?!(<#@))*/gi
@@ -9,6 +9,9 @@ const IDEA_REGEX = /<>(\w)+\s?(\w)*(?!(@#<))/gi
 const PERSON_TYPE = 'person';
 const HASHTAG_TYPE = 'hashtag';
 const RELATION_TYPE = 'relation';
+const IMMUTABLE_PERSON_ENTITY = 'personEntity';
+const IMMUTABLE_HASHTAG_ENTITY = 'hashtagEntity';
+const IMMUTABLE_RELATION_ENTITY = 'relationEntity';
 
 const names = ['Jim Avery', 'Bob Jenkins', 'Jonas Salk', 'Telly Savalas', 'Aaron Sorkin', 'Robert Untermeyer'];
 const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ', '123LetsGo'];
@@ -33,15 +36,15 @@ export class Main extends React.Component {
         component: this.RelationSpan,
       },
       {
-        strategy: this.getEntityStrategy('IMMUTABLE_PERSON').bind(this),
+        strategy: this.getEntityStrategy(IMMUTABLE_PERSON_ENTITY).bind(this),
         component: this.FinalizedPersonSpan
       },
       {
-        strategy: this.getEntityStrategy('IMMUTABLE_HASHTAG').bind(this),
+        strategy: this.getEntityStrategy(IMMUTABLE_HASHTAG_ENTITY).bind(this),
         component: this.FinalizedHashtagSpan
       },
       {
-        strategy: this.getEntityStrategy('IMMUTABLE_RELATION').bind(this),
+        strategy: this.getEntityStrategy(IMMUTABLE_RELATION_ENTITY).bind(this),
         component: this.FinalizedRelationSpan
       }
     ]);
@@ -55,7 +58,6 @@ export class Main extends React.Component {
 
     this.focus = () => this.refs.editor.focus();
     this.onChange = (editorState) => this.setState({editorState});
-    
   }
   
   componentDidMount() {
@@ -139,15 +141,15 @@ export class Main extends React.Component {
     let immutableType = '';
     switch(type) {
       case PERSON_TYPE:
-        immutableType = 'IMMUTABLE_PERSON';
+        immutableType = IMMUTABLE_PERSON_ENTITY;
         delimiter = '@';
         break;
       case HASHTAG_TYPE:
-        immutableType = 'IMMUTABLE_HASHTAG';
+        immutableType = IMMUTABLE_HASHTAG_ENTITY;
         delimiter = '#';
         break;
       case RELATION_TYPE:
-        immutableType = 'IMMUTABLE_RELATION';
+        immutableType = IMMUTABLE_RELATION_ENTITY;
         delimiter = '>';
         break;
     }
@@ -173,8 +175,6 @@ export class Main extends React.Component {
       focusKey: block.getKey(),
       focusOffset: selectionState.focusOffset,
     });
-    
-    //I add space at the beginning to break any preceding regex matches
     contentState = Modifier.replaceText(
       contentState,
       newSelectionState,
@@ -295,8 +295,7 @@ export class Main extends React.Component {
     // and for the list to figure out where it should be placed horizontally.
     // Otherwise you can see it jerking around on screen. Sure there is a better way.
     setTimeout(function() {
-      console.log('key', activeEditingKey);
-      let highlight = document.querySelector('.' + type + '[data-matchkey="' + activeEditingKey + '"]');
+      let highlight = document.querySelector('.' + type + '[data-offset-key="' + activeEditingKey + '"]');
       if (highlight) {
         document.querySelector('.searchResults').style.left = highlight.offsetLeft + 27 + 'px';
       } else {
@@ -488,12 +487,12 @@ export class Main extends React.Component {
   PersonSpan = (props) => {
     // This is wrong and apt to cause issues later, but right now
     // it isn't clear to me how to access a decorator's offsetkey
-    activeEditingKey = genKey();
+    activeEditingKey = props.offsetKey;
+    console.log('p', props);
     return (
       <span
         className={PERSON_TYPE}
-        data-offset-key={props.offsetKey}
-        data-matchkey={activeEditingKey}
+        data-offset-key={activeEditingKey}
         >
         {props.children}
       </span>
@@ -503,12 +502,11 @@ export class Main extends React.Component {
   HashtagSpan = (props) => {
     // This is wrong and apt to cause issues later, but right now
     // it isn't clear to me how to access a decorator's offsetkey
-    activeEditingKey = genKey();
+    activeEditingKey = props.offsetKey;
     return (
       <span
         className={HASHTAG_TYPE}
-        data-offset-key={props.offsetKey}
-        data-matchkey={activeEditingKey}
+        data-offset-key={activeEditingKey}
         >
         {props.children}
       </span>
@@ -518,12 +516,11 @@ export class Main extends React.Component {
   RelationSpan = (props) => {
     // This is wrong and apt to cause issues later, but right now
     // it isn't clear to me how to access a decorator's offsetkey
-    activeEditingKey = genKey();
+    activeEditingKey = props.offsetKey;
     return (
       <span
         className={RELATION_TYPE}
-        data-offset-key={props.offsetKey}
-        data-matchkey={activeEditingKey}
+        data-offset-key={activeEditingKey}
         >
         {props.children}
       </span>
