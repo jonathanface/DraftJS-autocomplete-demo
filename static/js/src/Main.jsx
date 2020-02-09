@@ -16,22 +16,48 @@ const IMMUTABLE_RELATION_ENTITY = 'relationEntity';
 const names = ['Jim Avery', 'Bob Jenkins', 'Jonas Salk', 'Telly Savalas', 'Aaron Sorkin', 'Robert Untermeyer'];
 const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ', '123LetsGo'];
 const relations = ['Archaeology', 'History', 'Machine Learning', 'Politics', 'Programming', 'Zoology'];
-var suggestions = [];
+
 var activeEditingKey;
-var tagIndex=0, browsingSuggestions = false;
-var searchList;
+var searchList = React.createRef();
+var searchListDOM = React.createRef();
+const ListItem = React.forwardRef((props, ref) => (<li tabIndex={props.tabIndex} ref={ref}>{props.value}</li>));
 
-const ListItem = ({ value, onClick }) => (
-  <li onClick={onClick}>{value}</li>
-);
-
-const SearchList = ({ items, onItemClick }) => (
-  <ul ref={searchList} style={{opacity:0}}>
-    {
-      items.map((item, i) => <ListItem key={i} value={item} onClick={onItemClick} />)
+export class SearchList extends React.Component {
+  constructor(props) {
+    super(props);
+    console.log('got props', props);
+    this.state = {
+      items:props.items
     }
-  </ul>
-);
+    this.onItemClick = props.onItemClick;
+  }
+  
+  liRefs = {};
+  
+  
+  componentWillReceiveProps(props) {
+    this.setState({
+      items: props.items
+    });
+  }
+  
+  
+  render() {
+    //this.liRefs = [];
+    console.log(this.state.items);
+
+    return(
+      <ul ref={searchListDOM} style={{opacity:0}}>
+        {this.state.items.map((item, index ) => {
+          this.liRefs[index] = React.createRef();
+          return (
+            <ListItem key={index} tabIndex={index} ref={this.liRefs[index]} value={item} onClick={this.onItemClick}/>
+          );
+        })}
+      </ul>
+    );
+  }
+}
 
 export class Main extends React.Component {
   constructor() {
@@ -63,13 +89,15 @@ export class Main extends React.Component {
       }
     ]);
     this.state = {
-      editorState: EditorState.createEmpty(compositeDecorator)
+      editorState: EditorState.createEmpty(compositeDecorator),
+      suggestions:[]
     };
 
     this.focus = () => this.refs.editor.focus();
     this.onChange = (editorState) => this.setState({editorState});
     
-    searchList = React.createRef();
+    this.tagIndex=0;
+    this.browsingSuggestions = false;
   }
   
   componentDidMount() {
@@ -84,17 +112,18 @@ export class Main extends React.Component {
   // Otherwise, jump down the list.
   onDownArrow(event) {
     event.preventDefault();
-    if (suggestions.length) {
-      if (tagIndex > suggestions.length-1) {
-        tagIndex = 0;
-        browsingSuggestions = false;
+    if (this.state.suggestions.length) {
+      if (this.tagIndex > this.state.suggestions.length-1) {
+        this.tagIndex = 0;
+        this.browsingSuggestions = false;
         this.focus();
         return;
       }
-      browsingSuggestions = true;
-      let currSpan = document.querySelectorAll('.searchResults li')[tagIndex];
-      currSpan.focus();
-      tagIndex++;
+      this.browsingSuggestions = true;
+      
+      searchList.current.liRefs[this.tagIndex].current.focus();
+      //searchList.current.focusItem(this.tagIndex);
+//      this.tagIndex++;
     }
   }
   
@@ -103,22 +132,22 @@ export class Main extends React.Component {
   // Otherwise, jump up the list.
   onUpArrow(event) {
     event.preventDefault();
-    if (suggestions.length) {
+    if (this.state.suggestions.length) {
       if (!browsingSuggestions) {
-        tagIndex = suggestions.length-1;
-        browsingSuggestions = true;
-        let currSpan = document.querySelectorAll('.searchResults li')[tagIndex];
+        this.tagIndex = this.state.suggestions.length-1;
+        this.browsingSuggestions = true;
+        let currSpan = document.querySelectorAll('.searchResults li')[this.tagIndex];
         currSpan.focus();
       } else {
         if (tagIndex <= 0) {
-          tagIndex=0;
-          browsingSuggestions = false;
+          this.tagIndex=0;
+          this.browsingSuggestions = false;
           this.focus();
           return;
         }
-        tagIndex--;
-        let currSpan = document.querySelectorAll('.searchResults li')[tagIndex];
-        currSpan.focus();
+        this.tagIndex--;
+        let ul = searchListDOM.current;
+        let li = ul.querySelectorAll('li')[this.tagIndex];
       }
     }
   }
@@ -126,9 +155,9 @@ export class Main extends React.Component {
   // Handler for both enter and tab keys.
   onEnter(event) {
     event.preventDefault();
-    if (browsingSuggestions) {
-      tagIndex = 0;
-      browsingSuggestions = false;
+    if (this.browsingSuggestions) {
+      this.tagIndex = 0;
+      this.browsingSuggestions = false;
       this.finalizeText(event.target.innerText, event.target.classList[0]);
     }
   }
@@ -261,8 +290,7 @@ export class Main extends React.Component {
   
   // Generate the selectable dropdown from the matched user input.
   addSelections(type) {
-    console.log('st', searchList.current);
-    let ul = searchList.current;
+    let ul = searchListDOM.current;
     console.log(ul.style);
     if (ul.style.opacity == 0) {
       setTimeout(function() {
@@ -358,7 +386,9 @@ export class Main extends React.Component {
         }, 50);
       } else {
         if (list.length) {
-          suggestions = [...new Set(list)];
+          this.setState({
+            suggestions:[...new Set(list)]
+          });
           this.addSelections(PERSON_TYPE);
         } else {
           this.clearSelections(PERSON_TYPE);
@@ -383,7 +413,9 @@ export class Main extends React.Component {
         }, 50);
       } else {
         if (list.length) {
-          suggestions = [...new Set(list)];
+          this.setState({
+            suggestions:[...new Set(list)]
+          });
           this.addSelections(HASHTAG_TYPE);
         } else {
           this.clearSelections(HASHTAG_TYPE);
@@ -408,7 +440,9 @@ export class Main extends React.Component {
         }, 50);
       } else {
         if (list.length) {
-          suggestions = [...new Set(list)];
+          this.setState({
+            suggestions:[...new Set(list)]
+          });
           this.addSelections(RELATION_TYPE);
         } else {
           this.clearSelections(RELATION_TYPE);
@@ -463,6 +497,7 @@ export class Main extends React.Component {
   }
 
   render() {
+    console.log('sug', this.state.suggestions);
     return (
       <div>
         <div onClick={this.focus} className="editorContainer">
@@ -475,7 +510,7 @@ export class Main extends React.Component {
             ref="editor"
             />
         </div>
-        <SearchList items={suggestions} onItemClick={this.handleSuggestionPress.bind(this)}></SearchList>
+        <SearchList ref={searchList} items={this.state.suggestions} onItemClick={this.handleSuggestionPress.bind(this)}></SearchList>
         <div className="info"><h4>Available Names:</h4><span className="nameDisplay"></span></div>
         <div className="info"><h4>Available Hashtags:</h4><span className="hashDisplay"></span></div>
         <div className="info"><h4>Available Relations:</h4><span className="relationsDisplay"></span></div>
