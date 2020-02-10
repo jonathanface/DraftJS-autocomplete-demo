@@ -50,6 +50,7 @@ ul {
   top:0px;
   margin-left:100px;
   margin-right:100px;
+  z-index:100;
 }
 
 ul li {

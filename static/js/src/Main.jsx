@@ -2,9 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import {EditorState, Editor, SelectionState, CompositeDecorator, Modifier} from 'draft-js';
 
-const HANDLE_REGEX = /@(\w)+(\s)?(\w)*(?!(@#<))/gi
+const HANDLE_REGEX = /@(\w)+( \t)?(\w)*(?!(@#<))/gi
 const HASHTAG_REGEX = /#(\w)+(?!(<#@))*/gi
-const IDEA_REGEX = /<>(\w)+\s?(\w)*(?!(@#<))/gi
+const IDEA_REGEX = /<>(\w)+( \t)?(\w)*(?!(@#<))/gi
 
 const PERSON_TYPE = 'person';
 const HASHTAG_TYPE = 'hashtag';
@@ -20,38 +20,34 @@ const relations = ['Archaeology', 'History', 'Machine Learning', 'Politics', 'Pr
 var activeEditingKey;
 var searchList = React.createRef();
 var searchListDOM = React.createRef();
-const ListItem = React.forwardRef((props, ref) => (<li tabIndex={props.tabIndex} ref={ref}>{props.value}</li>));
+const ListItem = React.forwardRef((props, ref) => (<li tabIndex={props.tabIndex} onClick={props.onClick} onKeyDown={props.onKeyDown} ref={ref}>{props.value}</li>));
 
 export class SearchList extends React.Component {
   constructor(props) {
     super(props);
-    console.log('got props', props);
     this.state = {
-      items:props.items
+      items:props.items,
+      searchVisible:0
     }
     this.onItemClick = props.onItemClick;
+    this.onItemPress = props.onItemPress;
   }
   
   liRefs = {};
-  
-  
+
   componentWillReceiveProps(props) {
     this.setState({
       items: props.items
     });
   }
-  
-  
-  render() {
-    //this.liRefs = [];
-    console.log(this.state.items);
 
+  render() {
     return(
-      <ul ref={searchListDOM} style={{opacity:0}}>
+      <ul ref={searchListDOM} style={{opacity:this.state.searchVisible}}>
         {this.state.items.map((item, index ) => {
           this.liRefs[index] = React.createRef();
           return (
-            <ListItem key={index} tabIndex={index} ref={this.liRefs[index]} value={item} onClick={this.onItemClick}/>
+            <ListItem key={index} tabIndex={index} ref={this.liRefs[index]} value={item} onClick={this.onItemClick} onKeyDown={this.onItemPress}/>
           );
         })}
       </ul>
@@ -92,11 +88,11 @@ export class Main extends React.Component {
       editorState: EditorState.createEmpty(compositeDecorator),
       suggestions:[]
     };
-
+    this.suggestionsType = null;
     this.focus = () => this.refs.editor.focus();
     this.onChange = (editorState) => this.setState({editorState});
     
-    this.tagIndex=0;
+    this.tagIndex=-1;
     this.browsingSuggestions = false;
   }
   
@@ -113,17 +109,16 @@ export class Main extends React.Component {
   onDownArrow(event) {
     event.preventDefault();
     if (this.state.suggestions.length) {
-      if (this.tagIndex > this.state.suggestions.length-1) {
-        this.tagIndex = 0;
+      if (this.tagIndex > this.state.suggestions.length-2) {
+        this.tagIndex = -1;
         this.browsingSuggestions = false;
         this.focus();
         return;
       }
+      this.tagIndex++;
       this.browsingSuggestions = true;
-      
       searchList.current.liRefs[this.tagIndex].current.focus();
-      //searchList.current.focusItem(this.tagIndex);
-//      this.tagIndex++;
+      
     }
   }
   
@@ -133,22 +128,16 @@ export class Main extends React.Component {
   onUpArrow(event) {
     event.preventDefault();
     if (this.state.suggestions.length) {
-      if (!browsingSuggestions) {
-        this.tagIndex = this.state.suggestions.length-1;
-        this.browsingSuggestions = true;
-        let currSpan = document.querySelectorAll('.searchResults li')[this.tagIndex];
-        currSpan.focus();
-      } else {
-        if (tagIndex <= 0) {
-          this.tagIndex=0;
-          this.browsingSuggestions = false;
-          this.focus();
-          return;
-        }
-        this.tagIndex--;
-        let ul = searchListDOM.current;
-        let li = ul.querySelectorAll('li')[this.tagIndex];
+      if (this.tagIndex <= 0) {
+        this.tagIndex = -1;
+        this.browsingSuggestions = false;
+        this.focus();
+        return;
       }
+      this.tagIndex--;
+      this.browsingSuggestions = true;
+      searchList.current.liRefs[this.tagIndex].current.focus();
+      
     }
   }
   
@@ -156,15 +145,26 @@ export class Main extends React.Component {
   onEnter(event) {
     event.preventDefault();
     if (this.browsingSuggestions) {
-      this.tagIndex = 0;
+      this.tagIndex = -1;
       this.browsingSuggestions = false;
-      this.finalizeText(event.target.innerText, event.target.classList[0]);
+      this.finalizeText(event.target.innerText, this.suggestionsType);
+    }
+  }
+  
+  handleKeyCommand(command) {
+    if (command == 'split-block') {
+      this.clearSelections(PERSON_TYPE);
+      this.clearSelections(HASHTAG_TYPE);
+      this.clearSelections(RELATION_TYPE);
     }
   }
   
   // User has entered text which matches something in one of our lists.
   // We will style it and make it immutable.
   finalizeText(text, type) {
+    this.clearSelections(type);
+    this.focus();
+    
     let contentState = this.state.editorState.getCurrentContent();
     let selectionState = this.state.editorState.getSelection();
     const block = contentState.getBlockForKey(selectionState.getAnchorKey());
@@ -212,61 +212,47 @@ export class Main extends React.Component {
     contentState = Modifier.replaceText(
       contentState,
       newSelectionState,
-      text 
+      text + ' '
     );
     this.setState({
       editorState: EditorState.push(
         this.state.editorState,
         contentState,
       )
-    });
-
-    // Make the formatted text immutable and give it styles.
-    let newBlock = contentState.getBlockForKey(newSelectionState.getAnchorKey());
-    newSelectionState = new SelectionState({
-      anchorKey: newBlock.getKey(),
-      anchorOffset: anchorPoint,
-      focusKey: newBlock.getKey(),
-      focusOffset: anchorPoint + text.length
-    });
-    let newContentState = contentState.createEntity('TOKEN', immutableType, {ignored:'true'});
-    const entityKey = newContentState.getLastCreatedEntityKey();
-    newContentState = Modifier.applyEntity(
-      contentState,
-      newSelectionState,
-      entityKey
-    );
-    this.setState({
-      editorState: EditorState.push(
-        this.state.editorState,
-        newContentState,
-      )
-    });
-
-    // Shift focus to end of our entry, and add a single whitespace.
-    const focusSelection = newSelectionState.merge({
-      anchorOffset: anchorPoint + text.length,
-      focusOffset: anchorPoint + text.length,
-    });
-    const newEditorState = EditorState.forceSelection(
-      this.state.editorState,
-      focusSelection
-    );
-    this.setState({ editorState: newEditorState });
-    
-    let cs = Modifier.insertText(
-      this.state.editorState.getCurrentContent(),
-      focusSelection,
-      ' '
-    );
-    const spaced = EditorState.push(
-        this.state.editorState,
-        cs,
-        ''
+    }, function() {
+      
+      // Make the formatted text immutable and give it styles.
+      let newBlock = contentState.getBlockForKey(newSelectionState.getAnchorKey());
+      newSelectionState = new SelectionState({
+        anchorKey: newBlock.getKey(),
+        anchorOffset: anchorPoint,
+        focusKey: newBlock.getKey(),
+        focusOffset: anchorPoint + text.length
+      });
+      let newContentState = contentState.createEntity('TOKEN', immutableType, {ignored:'true'});
+      const entityKey = newContentState.getLastCreatedEntityKey();
+      newContentState = Modifier.applyEntity(
+        contentState,
+        newSelectionState,
+        entityKey
       );
-    this.setState({ editorState: spaced });
-    this.clearSelections(type);
-    this.focus();
+      this.setState({
+        editorState: EditorState.push(
+          this.state.editorState,
+          newContentState,
+        )
+      }, function() {
+        const focusSelection = newSelectionState.merge({
+          anchorOffset: anchorPoint + text.length+1,
+          focusOffset: anchorPoint + text.length+1,
+        });
+        const newEditorState = EditorState.forceSelection(
+          this.state.editorState,
+          focusSelection
+        );
+        this.setState({ editorState: newEditorState });
+      });
+    });
   }
 
   // button handlers for the list options
@@ -290,34 +276,34 @@ export class Main extends React.Component {
   
   // Generate the selectable dropdown from the matched user input.
   addSelections(type) {
-    let ul = searchListDOM.current;
-    console.log(ul.style);
-    if (ul.style.opacity == 0) {
-      setTimeout(function() {
-        let highlight = document.querySelector('.' + type + '[data-offset-key="' + activeEditingKey + '"]');
-        console.log('hg', highlight);
-        if (highlight) {
-          console.log(highlight.clientHeight);
-          ul.style.left = highlight.offsetLeft + 27 + 'px';
-          ul.style.top = 100 + highlight.offsetTop + ul.clientHeight + 'px';
-        } else {
-          ul.style.left = '27px';
-          ul.style.top = '0px';
-        }
-        ul.style.opacity = 1;
-      }, 50);
-    } else {
-      ul.style.opacity = 0;
-    }
+    setTimeout(function() {
+      let ul = searchListDOM.current;
+      if (!searchList.current.state.searchVisible) { 
+          let highlight = document.querySelector('.' + type + '[data-offset-key="' + activeEditingKey + '"]');
+          console.log('hl', highlight);
+          console.log(activeEditingKey);
+          if (highlight) {
+            ul.style.left = highlight.offsetLeft + 27 + 'px';
+            ul.style.top = 100 + highlight.parentNode.parentNode.offsetTop + 40 + 'px';
+          } else {
+            ul.style.left = '27px';
+            ul.style.top = 100 + 40 + 'px';
+          }
+          
+        searchList.current.setState({
+          searchVisible:1
+        });
+      }
+    }, 50);
   }
   
   // Remove the list box.
-  clearSelections(className) {
-    if (document.querySelector('ul').classList.contains(className)) {
-      if (document.querySelector('ul')) {
-        document.querySelector('ul').innerHTML = '';
-      }
-      document.querySelector('ul').style.opacity = 0;
+  clearSelections(type) {
+    if (type == this.suggestionsType) {
+      console.log('clearing', type);
+      searchList.current.setState({
+        searchVisible:0
+      });
     }
   }
   
@@ -342,7 +328,8 @@ export class Main extends React.Component {
     
     const text = contentBlock.getText();
     let matchArr, matches = [];
-    while ((matchArr = regex.exec(text)) !== null) {
+    let reg = new RegExp(regex);
+    while ((matchArr = reg.exec(text)) !== null) {
       let start = matchArr.index;
       let end = start + matchArr[0].length;
       let entpos = this.checkForEntity(contentBlock, contentState, start, end);
@@ -354,7 +341,6 @@ export class Main extends React.Component {
       let exactMatch = null;
       suggestionsArr.forEach(function (suggestion, index) {
         if (suggestion.toLowerCase() == textSlice.toLowerCase()) {
-          matchArr = null;
           exactMatch = suggestion;
         } else {
           let search = suggestion.match(regex);
@@ -375,15 +361,12 @@ export class Main extends React.Component {
   person(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
-    let self = this;
+    
     let list = this.getSuggestions(contentBlock, contentState, PERSON_TYPE);
     if (list) {
+      this.suggestionsType = PERSON_TYPE;
       if (!Array.isArray(list)) {
-        // Text entered is exact match.
-        // Have to delay a bit so onchange can update state.
-        setTimeout(function() {
-          self.finalizeText(list, PERSON_TYPE);
-        }, 50);
+        this.finalizeText(list, PERSON_TYPE);
       } else {
         if (list.length) {
           this.setState({
@@ -394,6 +377,8 @@ export class Main extends React.Component {
           this.clearSelections(PERSON_TYPE);
         }
       }
+    } else {
+      this.clearSelections(PERSON_TYPE);
     }
     this.findWithRegex(HANDLE_REGEX, contentBlock, callback, contentState);
   }
@@ -402,15 +387,11 @@ export class Main extends React.Component {
   hashtag(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
-    let self = this;
     let list = this.getSuggestions(contentBlock, contentState, HASHTAG_TYPE);
     if (list) {
+      this.suggestionsType = HASHTAG_TYPE;
       if (!Array.isArray(list)) {
-        // Text entered is exact match.
-        // Have to delay a bit so onchange can update state.
-        setTimeout(function() {
-          self.finalizeText(list, HASHTAG_TYPE);
-        }, 50);
+        this.finalizeText(list, HASHTAG_TYPE);
       } else {
         if (list.length) {
           this.setState({
@@ -421,6 +402,8 @@ export class Main extends React.Component {
           this.clearSelections(HASHTAG_TYPE);
         }
       }
+    } else {
+      this.clearSelections(HASHTAG_TYPE);
     }
     this.findWithRegex(HASHTAG_REGEX, contentBlock, callback, contentState);
   }
@@ -429,15 +412,11 @@ export class Main extends React.Component {
   relation(contentBlock, callback, contentState) {
     const text = contentBlock.getText();
     let start, matchArr, matches = [];
-    let self = this;
     let list = this.getSuggestions(contentBlock, contentState, RELATION_TYPE);
     if (list) {
+      this.suggestionsType = RELATION_TYPE;
       if (!Array.isArray(list)) {
-        // Text entered is exact match.
-        // Have to delay a bit so onchange can update state.
-        setTimeout(function() {
-          self.finalizeText(list, RELATION_TYPE);
-        }, 50);
+        this.finalizeText(list, RELATION_TYPE);
       } else {
         if (list.length) {
           this.setState({
@@ -448,6 +427,8 @@ export class Main extends React.Component {
           this.clearSelections(RELATION_TYPE);
         }
       }
+    } else {
+      this.clearSelections(RELATION_TYPE);
     }
     this.findWithRegex(IDEA_REGEX, contentBlock, callback, contentState);
   }
@@ -497,11 +478,11 @@ export class Main extends React.Component {
   }
 
   render() {
-    console.log('sug', this.state.suggestions);
     return (
       <div>
         <div onClick={this.focus} className="editorContainer">
           <Editor
+            handleKeyCommand={this.handleKeyCommand.bind(this)}
             onDownArrow={this.onDownArrow.bind(this)}
             onUpArrow={this.onUpArrow.bind(this)}
             editorState={this.state.editorState}
@@ -510,7 +491,7 @@ export class Main extends React.Component {
             ref="editor"
             />
         </div>
-        <SearchList ref={searchList} items={this.state.suggestions} onItemClick={this.handleSuggestionPress.bind(this)}></SearchList>
+        <SearchList ref={searchList} items={this.state.suggestions} onItemClick={this.handleSuggestionPress.bind(this)} onItemPress={this.handleSuggestionPress.bind(this)}></SearchList>
         <div className="info"><h4>Available Names:</h4><span className="nameDisplay"></span></div>
         <div className="info"><h4>Available Hashtags:</h4><span className="hashDisplay"></span></div>
         <div className="info"><h4>Available Relations:</h4><span className="relationsDisplay"></span></div>
