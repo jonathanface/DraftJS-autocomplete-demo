@@ -2,9 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import {EditorState, Editor, SelectionState, CompositeDecorator, Modifier} from 'draft-js';
 
-const HANDLE_REGEX = /@(\w)+( \t)?(\w)*(?!(@#<))/gi
+const HANDLE_REGEX = /@(\w)+( |\t)?(\w)*(?!(@#<))/gi
 const HASHTAG_REGEX = /#(\w)+(?!(<#@))*/gi
-const IDEA_REGEX = /<>(\w)+( \t)?(\w)*(?!(@#<))/gi
+const IDEA_REGEX = /<>(\w)+( |\t)?(\w)*(?!(@#<))/gi
 
 const PERSON_TYPE = 'person';
 const HASHTAG_TYPE = 'hashtag';
@@ -20,8 +20,10 @@ const relations = ['Archaeology', 'History', 'Machine Learning', 'Politics', 'Pr
 var activeEditingKey;
 var searchList = React.createRef();
 var searchListDOM = React.createRef();
-const ListItem = React.forwardRef((props, ref) => (<li tabIndex={props.tabIndex} onClick={props.onClick} onKeyDown={props.onKeyDown} ref={ref}>{props.value}</li>));
 
+var editMap = {};
+
+const ListItem = React.forwardRef((props, ref) => (<li tabIndex={props.tabIndex} onClick={props.onClick} onKeyDown={props.onKeyDown} ref={ref}>{props.value}</li>));
 export class SearchList extends React.Component {
   constructor(props) {
     super(props);
@@ -35,10 +37,13 @@ export class SearchList extends React.Component {
   
   liRefs = {};
 
-  componentWillReceiveProps(props) {
-    this.setState({
-      items: props.items
-    });
+  static getDerivedStateFromProps(props, prevState) {
+    if (prevState.items != props.items) {
+      return {
+        items: props.items
+      };
+    }
+    return null;
   }
 
   render() {
@@ -272,16 +277,27 @@ export class Main extends React.Component {
     }
   }
   
+  // click handler for the list options
+  handleSuggestionClick(event) {
+    event.preventDefault();
+    this.browsingSuggestions = true;
+    this.onEnter(event);
+  }
+  
 
   
   // Generate the selectable dropdown from the matched user input.
   addSelections(type) {
+    const selectionState = this.state.editorState.getSelection();
+    let focus = selectionState.focusOffset;
     setTimeout(function() {
+      if (!(focus >= editMap[activeEditingKey].start && focus <= editMap[activeEditingKey].end)) {
+        console.log(focus, 'out of bounds of ', activeEditingKey);
+        return;
+      }
       let ul = searchListDOM.current;
       if (!searchList.current.state.searchVisible) { 
           let highlight = document.querySelector('.' + type + '[data-offset-key="' + activeEditingKey + '"]');
-          console.log('hl', highlight);
-          console.log(activeEditingKey);
           if (highlight) {
             ul.style.left = highlight.offsetLeft + 27 + 'px';
             ul.style.top = 100 + highlight.parentNode.parentNode.offsetTop + 40 + 'px';
@@ -300,7 +316,6 @@ export class Main extends React.Component {
   // Remove the list box.
   clearSelections(type) {
     if (type == this.suggestionsType) {
-      console.log('clearing', type);
       searchList.current.setState({
         searchVisible:0
       });
@@ -308,60 +323,94 @@ export class Main extends React.Component {
   }
   
   getSuggestions(contentBlock, contentState, type) {
-    
-    let regex, suggestionsArr, startOffset = 1;
+    let regex, suggestionsArr, startOffset = 1, delimiter='';
     switch(type) {
       case PERSON_TYPE:
         regex = HANDLE_REGEX;
         suggestionsArr = names;
+        delimiter = '@';
         break;
       case HASHTAG_TYPE:
         regex = HASHTAG_REGEX;
         suggestionsArr = hashes;
+        delimiter = '#';
         break;
       case RELATION_TYPE:
         regex = IDEA_REGEX;
         suggestionsArr = relations;
+        delimiter = '>';
         startOffset = 2;
         break;
     }
     
+    const selection = this.state.editorState.getSelection();
+    let anchorPoint=null;
     const text = contentBlock.getText();
+    for (let i=selection.focusOffset; i >= 0; i--) {
+      switch(type) {
+        case PERSON_TYPE:
+          if (text[i] == '#' || text[i] == '>') {
+            return;
+          }
+          break;
+        case HASHTAG_TYPE:
+          if (text[i] == '@' || text[i] == '>') {
+            return;
+          }
+          break;
+        case RELATION_TYPE:
+          if (text[i] == '@' || text[i] == '#') {
+            return;
+          }
+          break;
+      }
+      if (text[i] == delimiter) {
+        if (type == RELATION_TYPE) {
+          if (text[i-1] == '<') {
+            anchorPoint = i-1;
+          }
+        } else {
+          anchorPoint = i;
+        }
+        break;
+      }
+    }
+    let textSlice = text.slice(anchorPoint, text.length).trim();
     let matchArr, matches = [];
     let reg = new RegExp(regex);
-    while ((matchArr = reg.exec(text)) !== null) {
-      let start = matchArr.index;
-      let end = start + matchArr[0].length;
-      let entpos = this.checkForEntity(contentBlock, contentState, start, end);
-      if (entpos !== null) {
-        end = entpos;
-      }
-      let textSlice = text.slice(start+startOffset, end).trim();
-      let regex = new RegExp('^'+textSlice, 'ig');
-      let exactMatch = null;
-      suggestionsArr.forEach(function (suggestion, index) {
-        if (suggestion.toLowerCase() == textSlice.toLowerCase()) {
-          exactMatch = suggestion;
-        } else {
-          let search = suggestion.match(regex);
-          if (search) {
-            matches.push(suggestion);
-          }
+    if (textSlice.length) {
+      while ((matchArr = reg.exec(textSlice)) !== null) {
+        this.clearSelections(type);
+        let start = anchorPoint;
+        let end = start + matchArr[0].length;
+        let entpos = this.checkForEntity(contentBlock, contentState, start, end);
+        if (entpos !== null) {
+          end = entpos;
         }
-      });
-      if (exactMatch) {
-        return exactMatch;
+        let subSlice = textSlice.slice(startOffset, end).trim();
+        let subregex = new RegExp('^'+subSlice, 'ig');
+        let exactMatch = null;
+        suggestionsArr.forEach(function (suggestion, index) {
+          if (suggestion.toLowerCase() == subSlice.toLowerCase()) {
+            exactMatch = suggestion;
+          } else {
+            let search = suggestion.match(subregex);
+            if (search) {
+              matches.push(suggestion);
+            }
+          }
+        });
+        if (exactMatch) {
+          return exactMatch;
+        }
+        return matches;
       }
-      return matches;
     }
     return null;
   }
   
   // Matching type person, indicated by @ character.
   person(contentBlock, callback, contentState) {
-    const text = contentBlock.getText();
-    let start, matchArr, matches = [];
-    
     let list = this.getSuggestions(contentBlock, contentState, PERSON_TYPE);
     if (list) {
       this.suggestionsType = PERSON_TYPE;
@@ -385,8 +434,6 @@ export class Main extends React.Component {
 
   // Matching type hashtag indicated by # character.
   hashtag(contentBlock, callback, contentState) {
-    const text = contentBlock.getText();
-    let start, matchArr, matches = [];
     let list = this.getSuggestions(contentBlock, contentState, HASHTAG_TYPE);
     if (list) {
       this.suggestionsType = HASHTAG_TYPE;
@@ -403,15 +450,13 @@ export class Main extends React.Component {
         }
       }
     } else {
-      this.clearSelections(HASHTAG_TYPE);
+     this.clearSelections(HASHTAG_TYPE);
     }
     this.findWithRegex(HASHTAG_REGEX, contentBlock, callback, contentState);
   }
 
   // Matching type relation indicated by '<>' characters.
   relation(contentBlock, callback, contentState) {
-    const text = contentBlock.getText();
-    let start, matchArr, matches = [];
     let list = this.getSuggestions(contentBlock, contentState, RELATION_TYPE);
     if (list) {
       this.suggestionsType = RELATION_TYPE;
@@ -491,7 +536,7 @@ export class Main extends React.Component {
             ref="editor"
             />
         </div>
-        <SearchList ref={searchList} items={this.state.suggestions} onItemClick={this.handleSuggestionPress.bind(this)} onItemPress={this.handleSuggestionPress.bind(this)}></SearchList>
+        <SearchList ref={searchList} items={this.state.suggestions} onItemClick={this.handleSuggestionClick.bind(this)} onItemPress={this.handleSuggestionPress.bind(this)}></SearchList>
         <div className="info"><h4>Available Names:</h4><span className="nameDisplay"></span></div>
         <div className="info"><h4>Available Hashtags:</h4><span className="hashDisplay"></span></div>
         <div className="info"><h4>Available Relations:</h4><span className="relationsDisplay"></span></div>
@@ -506,6 +551,7 @@ export class Main extends React.Component {
 
 const PersonSpan = props => {
   activeEditingKey = props.offsetKey;
+  editMap[props.offsetKey] = {'start':props.start, 'end':props.end};
   return (
     <span className={PERSON_TYPE} data-offset-key={activeEditingKey}>
       {props.children}
@@ -516,6 +562,7 @@ const PersonSpan = props => {
 
 const HashtagSpan = props => {
   activeEditingKey = props.offsetKey;
+  editMap[props.offsetKey] = {'start':props.start, 'end':props.end};
   return (
     <span className={HASHTAG_TYPE} data-offset-key={activeEditingKey}>
       {props.children}
@@ -525,6 +572,7 @@ const HashtagSpan = props => {
 
 const RelationSpan = props => {
   activeEditingKey = props.offsetKey;
+  editMap[props.offsetKey] = {'start':props.start, 'end':props.end};
   return (
     <span className={RELATION_TYPE} data-offset-key={activeEditingKey}>
       {props.children}
