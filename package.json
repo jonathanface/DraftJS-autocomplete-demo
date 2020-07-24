@@ -1,7 +1,7 @@
 {
-  "name": "IdeaFlow_Coding_Challenge",
+  "name": "DraftJS_Demo",
   "version": "1.0.0",
-  "description": "coding challenge",
+  "description": "Demo of DraftJS module with autocomplete function",
   "main": "index.js",
   "scripts": {
     "minify": "uglifyjs static/js/dist/bundle.js -o static/js/dist/bundle.min.js",
@@ -11,19 +11,19 @@
   "author": "Jonathan Face",
   "license": "MIT",
   "devDependencies": {
-    "@babel/cli": "^7.8.4",
-    "@babel/core": "^7.8.4",
-    "@babel/preset-env": "^7.8.4",
-    "@babel/preset-react": "^7.8.3",
+    "@babel/cli": "^7.10.5",
+    "@babel/core": "^7.10.5",
+    "@babel/preset-env": "^7.10.4",
+    "@babel/preset-react": "^7.10.4",
     "babel-preset-env": "^1.7.0",
     "babelify": "^10.0.0"
   },
   "dependencies": {
-    "@babel/plugin-proposal-class-properties": "^7.8.3",
-    "draft-js": "^0.11.4",
+    "@babel/plugin-proposal-class-properties": "^7.10.4",
+    "draft-js": "^0.11.6",
     "draftjs-utils": "^0.10.2",
-    "react": "^16.4.2",
-    "react-dom": "^16.4.2",
+    "react": "^16.13.1",
+    "react-dom": "^16.13.1",
     "uglifyjs": "^2.4.11"
   },
   "repository": {
