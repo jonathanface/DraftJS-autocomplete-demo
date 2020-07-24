@@ -1,5 +1,5 @@
 {
-  "name": "DraftJS_Demo",
+  "name": "DraftJS_Autocomplete",
   "version": "1.0.0",
   "description": "Demo of DraftJS module with autocomplete function",
   "main": "index.js",
@@ -28,10 +28,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jonathanface/jjf.im.git"
+    "url": "git+https://github.com/jonathanface/DraftJS-autocomplete-demo.git"
   },
   "bugs": {
-    "url": "https://github.com/jonathanface/jjf.im/issues"
+    "url": "https://github.com/jonathanface/DraftJS-autocomplete-demo/issues"
   },
-  "homepage": "https://github.com/jonathanface/jjf.im#readme"
+  "homepage": "https://github.com/jonathanface/DraftJS-autocomplete-demo#readme"
 }
