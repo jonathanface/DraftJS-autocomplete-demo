@@ -9,9 +9,8 @@ const IDEA_REGEX = /<>(\w)+( |\t)?(\w)*(?!(@#<))/gi
 const PERSON_TYPE = 'person';
 const HASHTAG_TYPE = 'hashtag';
 const RELATION_TYPE = 'relation';
-const IMMUTABLE_PERSON_ENTITY = 'personEntity';
-const IMMUTABLE_HASHTAG_ENTITY = 'hashtagEntity';
-const IMMUTABLE_RELATION_ENTITY = 'relationEntity';
+const IMMUTABLE_TYPE = 'IMMUTABLE';
+const MUTABLE_TYPE = 'MUTABLE';
 
 const names = ['Jim Avery', 'Bob Jenkins', 'Jonas Salk', 'Telly Savalas', 'Aaron Sorkin', 'Robert Untermeyer'];
 const hashes = ['BlahBlah', 'Gencon2020', 'HappyBirthday', 'Pokemon', 'ZzZzZzZzZ', '123LetsGo'];
@@ -20,7 +19,6 @@ const relations = ['Archaeology', 'History', 'Machine Learning', 'Politics', 'Pr
 var activeEditingKey;
 var searchList = React.createRef();
 var searchListDOM = React.createRef();
-
 var editMap = {};
 
 const ListItem = React.forwardRef((props, ref) => (<li tabIndex={props.tabIndex} onClick={props.onClick} onKeyDown={props.onKeyDown} ref={ref}>{props.value}</li>));
@@ -63,36 +61,62 @@ export class SearchList extends React.Component {
 export class Main extends React.Component {
   constructor() {
     super();
-    const compositeDecorator = new CompositeDecorator([
+    this.state = {
+      suggestions: []
+    };
+    
+    this.compositeDecorator = new CompositeDecorator([
       {
         strategy: this.person.bind(this),
-        component: PersonSpan,
+        component: ColorMatchSpan,
+        props: {
+          'type': PERSON_TYPE,
+          'getSuggestions':this.getSuggestionsLength.bind(this),
+          'updateContentStateFromChild':this.updateContentStateFromChild.bind(this)
+        }
       },
       {
         strategy: this.hashtag.bind(this),
-        component: HashtagSpan,
+        component: ColorMatchSpan,
+        props: {
+          'type': HASHTAG_TYPE,
+          'getSuggestions':this.getSuggestionsLength.bind(this)
+        }
       },
       {
         strategy: this.relation.bind(this),
-        component: RelationSpan,
+        component: ColorMatchSpan,
+        props: {
+          'type': RELATION_TYPE,
+          'getSuggestions':this.getSuggestionsLength.bind(this)
+        }
       },
       {
-        strategy: this.getEntityStrategy(IMMUTABLE_PERSON_ENTITY).bind(this),
-        component: FinalizedPersonSpan
+        strategy: this.getImmutableEntityStrategy(PERSON_TYPE).bind(this),
+        component: FinalizedSpan,
+        props: {
+          'type': PERSON_TYPE,
+          'updateContentStateFromChild':this.updateContentStateFromChild.bind(this)
+        }
       },
       {
-        strategy: this.getEntityStrategy(IMMUTABLE_HASHTAG_ENTITY).bind(this),
-        component: FinalizedHashtagSpan
+        strategy: this.getImmutableEntityStrategy(HASHTAG_TYPE).bind(this),
+        component: FinalizedSpan,
+        props: {
+          'type': HASHTAG_TYPE,
+          'updateContentStateFromChild':this.updateContentStateFromChild.bind(this)
+        }
       },
       {
-        strategy: this.getEntityStrategy(IMMUTABLE_RELATION_ENTITY).bind(this),
-        component: FinalizedRelationSpan
-      }
+        strategy: this.getImmutableEntityStrategy(RELATION_TYPE).bind(this),
+        component: FinalizedSpan,
+        props: {
+          'type': RELATION_TYPE,
+          'updateContentStateFromChild':this.updateContentStateFromChild.bind(this)
+        }
+      },
     ]);
-    this.state = {
-      editorState: EditorState.createEmpty(compositeDecorator),
-      suggestions:[]
-    };
+    
     this.suggestionsType = null;
     this.focus = () => this.refs.editor.focus();
     this.onChange = (editorState) => this.setState({editorState});
@@ -101,24 +125,41 @@ export class Main extends React.Component {
     this.browsingSuggestions = false;
   }
   
+  updateContentStateFromChild(contentState) {
+    console.log('update from child');
+    this.setState({
+      editorState: EditorState.push(
+        this.state.editorState,
+        contentState
+      )
+    });
+  }
+  
+  getSuggestionsLength() {
+    return this.state.suggestions.length;
+  }
+  
   componentDidMount() {
     document.querySelectorAll('.info span')[0].innerHTML = JSON.stringify(names, undefined, 2);
     document.querySelectorAll('.info span')[1].innerHTML = JSON.stringify(hashes, undefined, 2);
     document.querySelectorAll('.info span')[2].innerHTML = JSON.stringify(relations, undefined, 2);
   }
   
+  componentWillMount() {
+    this.setState({
+      editorState: EditorState.createEmpty(this.compositeDecorator),
+    });
+  }
+  
   
   // If down arrow is pressed, and the list is not being browsed, go to the first option.
-  // If we're at the bottom of the list, return focus to the editor.
+  // If we're at the bottom of the list, jump back up to the top.
   // Otherwise, jump down the list.
   onDownArrow(event) {
     event.preventDefault();
     if (this.state.suggestions.length) {
-      if (this.tagIndex > this.state.suggestions.length-2) {
+      if (this.tagIndex >= this.state.suggestions.length-1) {
         this.tagIndex = -1;
-        this.browsingSuggestions = false;
-        this.focus();
-        return;
       }
       this.tagIndex++;
       this.browsingSuggestions = true;
@@ -128,21 +169,18 @@ export class Main extends React.Component {
   }
   
   // If up arrow is pressed, and the list is not being browsed, go to the last option.
-  // If we're at the top of the list, return focus to the editor.
+  // If we're at the top of the list, jump to the bottom.
   // Otherwise, jump up the list.
   onUpArrow(event) {
     event.preventDefault();
     if (this.state.suggestions.length) {
       if (this.tagIndex <= 0) {
-        this.tagIndex = -1;
-        this.browsingSuggestions = false;
-        this.focus();
-        return;
+        this.tagIndex = this.state.suggestions.length;
       }
       this.tagIndex--;
+      console.log('ind', this.tagIndex);
       this.browsingSuggestions = true;
       searchList.current.liRefs[this.tagIndex].current.focus();
-      
     }
   }
   
@@ -177,18 +215,15 @@ export class Main extends React.Component {
     // Find the delimiter to use as anchor start point.
     let anchorPoint = 0;
     let delimiter = '';
-    let immutableType = '';
+    
     switch(type) {
       case PERSON_TYPE:
-        immutableType = IMMUTABLE_PERSON_ENTITY;
         delimiter = '@';
         break;
       case HASHTAG_TYPE:
-        immutableType = IMMUTABLE_HASHTAG_ENTITY;
         delimiter = '#';
         break;
       case RELATION_TYPE:
-        immutableType = IMMUTABLE_RELATION_ENTITY;
         delimiter = '>';
         break;
     }
@@ -206,6 +241,7 @@ export class Main extends React.Component {
         break;
       }
     }
+    console.log('anch', anchorPoint);
     
     // Select our range and replace it with the properly formatted text from our list.
     let newSelectionState = new SelectionState({
@@ -234,7 +270,11 @@ export class Main extends React.Component {
         focusKey: newBlock.getKey(),
         focusOffset: anchorPoint + text.length
       });
-      let newContentState = contentState.createEntity('TOKEN', immutableType, {ignored:'true'});
+      let newContentState = contentState.createEntity(
+        type,
+        IMMUTABLE_TYPE,
+        {'ignored':true}
+      );
       const entityKey = newContentState.getLastCreatedEntityKey();
       newContentState = Modifier.applyEntity(
         contentState,
@@ -291,13 +331,15 @@ export class Main extends React.Component {
     const selectionState = this.state.editorState.getSelection();
     let focus = selectionState.focusOffset;
     setTimeout(function() {
+      /*
       if (!(focus >= editMap[activeEditingKey].start && focus <= editMap[activeEditingKey].end)) {
-        console.log(focus, 'out of bounds of ', activeEditingKey);
+        console.log(editMap[activeEditingKey]);
+        console.log(focus, ' out of range for ', editMap[activeEditingKey].start, + ' and ' + editMap[activeEditingKey].end);
         return;
-      }
+      }*/
       let ul = searchListDOM.current;
       if (!searchList.current.state.searchVisible) { 
-          let highlight = document.querySelector('.' + type + '[data-offset-key="' + activeEditingKey + '"]');
+          let highlight = document.querySelector('.' + type + '[data-offset-key="' + activeEditingKey + '"][data-start="' + editMap[activeEditingKey].start + '"]');
           if (highlight) {
             ul.style.left = highlight.offsetLeft + 27 + 'px';
             ul.style.top = 100 + highlight.parentNode.parentNode.offsetTop + 40 + 'px';
@@ -316,6 +358,9 @@ export class Main extends React.Component {
   // Remove the list box.
   clearSelections(type) {
     if (type == this.suggestionsType) {
+      this.setState({
+        suggestions:[]
+      });
       searchList.current.setState({
         searchVisible:0
       });
@@ -364,6 +409,7 @@ export class Main extends React.Component {
           }
           break;
       }
+      
       if (text[i] == delimiter) {
         if (type == RELATION_TYPE) {
           if (text[i-1] == '<') {
@@ -479,25 +525,29 @@ export class Main extends React.Component {
   }
 
   // callback to render immutable entities
-  getEntityStrategy(mutability) {
+  getImmutableEntityStrategy(type) {
     return function(contentBlock, callback, contentState) {
       contentBlock.findEntityRanges((character) => {
         const entityKey = character.getEntity();
         if (entityKey === null) {
           return false;
         }
-        return contentState.getEntity(entityKey).getMutability() === mutability;
+        return (contentState.getEntity(entityKey).getMutability() === IMMUTABLE_TYPE && contentState.getEntity(entityKey).type == type)
       }, callback);
     };
   }
   
+  //This is to make sure our regex doesn't search into adjacent finalized text blocks
   checkForEntity(contentBlock, contentState, start, end) {
     let entStart = null;
     for (let i=start; i < end; i++) {
       let entKey = contentBlock.getEntityAt(i);
+      console.log('found entkey', entKey);
       if (entKey) {
         let ent = contentState.getEntity(entKey);
-        if (ent.data.ignored == 'true') {
+        console.log(ent.data);
+        if (ent.data.ignored) {
+          console.warn("SEARCHING INTO FINALIZED TEXT BLOCK");
           entStart = i;
           break;
         }
@@ -510,19 +560,44 @@ export class Main extends React.Component {
     const text = contentBlock.getText();
     let match;
     regex = new RegExp(regex);
+    let selectionState = this.state.editorState.getSelection();
+
     while ((match = regex.exec(text)) !== null) {
+      console.log('found ', match);
       let start = match.index;
       let end = start + match[0].length;
+      
       let entpos = this.checkForEntity(contentBlock, contentState, start, end);
-      if (entpos === null) {
-        callback(start, end);
-      } else {
-        callback(start, entpos);
+      if (entpos) {
+        end=entpos;
+        let newSelection = new SelectionState({
+          anchorKey: contentBlock.blockKey,
+          anchorOffset: start,
+          focusKey: contentBlock.blockKey,
+          focusOffset: end
+        });
+        let matchText = '';
+        for (let i=start; i < end; i++) {
+          matchText += text[i];
+        }
+        let newContentState = Modifier.replaceText(
+          contentState,
+          newSelection,
+          matchText
+        );
+        const block = newContentState.getBlockForKey(newSelection.getAnchorKey());
+        console.log('modded: ', block.getText());
+        //return this.findWithRegex(regex, block, callback, contentState);
       }
+      
+      //console.log('styling text: ' + matchText);
+      console.log('start', start, 'end', end);
+      callback(start, end);
     }
   }
 
   render() {
+    
     return (
       <div>
         <div onClick={this.focus} className="editorContainer">
@@ -549,57 +624,107 @@ export class Main extends React.Component {
 
 
 
-const PersonSpan = props => {
-  activeEditingKey = props.offsetKey;
-  editMap[props.offsetKey] = {'start':props.start, 'end':props.end};
-  return (
-    <span className={PERSON_TYPE} data-offset-key={activeEditingKey}>
-      {props.children}
-    </span>
-  );
+class ColorMatchSpan extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      matches: props.getSuggestions(),
+      offsetKey:props.offsetKey,
+      start:props.start,
+      end:props.end,
+      type:props.type,
+      pClass: props.getSuggestions() ? props.type : 'entityNotFound'
+    };
+    
+   
+    activeEditingKey = props.offsetKey;
+    
+    editMap[activeEditingKey] = {'start':props.start, 'end':props.end};
+    console.log('new block start', props.start);
+    console.log('new block end', props.end);
+    
+  }
+  static getDerivedStateFromProps = (props, state) => {
+    let returnState = {};
+    if (props.getSuggestions() != state.matches) {
+      returnState.matches=props.getSuggestions();
+      returnState.pClass=props.getSuggestions() ? state.type : 'entityNotFound';
+    }
+    if (props.end != state.end) {
+      editMap[activeEditingKey] = {'start':props.start, 'end':props.end};
+      returnState.end = props.end;
+    }
+    if (props.start != state.start) {
+      editMap[activeEditingKey] = {'start':props.start, 'end':props.end};
+      returnState.end = props.end;
+    }
+    if (Object.entries(returnState).length) {
+      return returnState;
+    }
+
+    return null;
+  }
+  
+  render() {
+    return (
+      <span className={this.state.pClass} data-offset-key={activeEditingKey} data-start={this.state.start} data-end={this.state.end}>
+        {this.props.children}
+      </span>
+    );
+  }
 };
 
+class FinalizedSpan extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      render:true,
+      type:props.type
+    };
+  }
+  
+  deleteThis() {
+    //I have to blank the text field before hiding it, because the hidden
+    //text can mess with the regex search, so here I make it mutable again,
+    //wipe it, and then hide the component.
+    let newSelectionState = new SelectionState({
+      anchorKey: this.props.blockKey,
+      anchorOffset: this.props.start,
+      focusKey: this.props.blockKey,
+      focusOffset: this.props.start + this.props.decoratedText.length,
+    });
+    let newContentState = this.props.contentState.createEntity(
+      this.props.type,
+      MUTABLE_TYPE,
+      {'ignored':true}
+    );
+    const entityKey = newContentState.getLastCreatedEntityKey();
+    newContentState = Modifier.applyEntity(
+      newContentState,
+      newSelectionState,
+      entityKey
+    );
 
-const HashtagSpan = props => {
-  activeEditingKey = props.offsetKey;
-  editMap[props.offsetKey] = {'start':props.start, 'end':props.end};
-  return (
-    <span className={HASHTAG_TYPE} data-offset-key={activeEditingKey}>
-      {props.children}
-    </span>
-  );
-};
-
-const RelationSpan = props => {
-  activeEditingKey = props.offsetKey;
-  editMap[props.offsetKey] = {'start':props.start, 'end':props.end};
-  return (
-    <span className={RELATION_TYPE} data-offset-key={activeEditingKey}>
-      {props.children}
-    </span>
-  );
-};
-
-const FinalizedPersonSpan = props => {
-  return (
-    <span className={'final ' + PERSON_TYPE}>
-      {props.children}
-    </span>
-  );
-};
-
-const FinalizedHashtagSpan = props => {
-  return (
-    <span className={'final ' + HASHTAG_TYPE}>
-      {props.children}
-    </span>
-  );
-};
-
-const FinalizedRelationSpan = props => {
-  return (
-    <span className={'final ' + RELATION_TYPE}>
-      {props.children}
-    </span>
-  );
-};
+    newContentState = Modifier.replaceText(
+      newContentState,
+      newSelectionState,
+      ''
+    );
+    this.props.updateContentStateFromChild(newContentState);
+    console.log('deleting from ' + newSelectionState.anchorOffset, newSelectionState.focusOffset);
+    
+    this.setState({
+      render:false
+    });
+  }
+  
+  render() {
+    if (this.state.render === false) return null;
+    return (
+      <span data-finalized="true" className={'final ' + this.state.type}>
+        {this.props.children}
+        <span onClick={this.deleteThis.bind(this)} className="closer">x</span>
+      </span>
+    );
+  }
+}

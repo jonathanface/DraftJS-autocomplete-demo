@@ -32,12 +32,29 @@ body {
 
 .person {
   color:blue;
+
 }
 .hashtag {
   color:green;
 }
 .relation {
   color:#b9b93d;
+}
+
+.entityNotFound {
+  color:red;
+}
+.closer {
+  text-decoration:none;
+  color: #000;
+  cursor: pointer;
+  right: 0px;
+  top: 0px;
+  margin: -5px 5px 0px 10px;
+  opacity: 0.3;
+}
+.closer:hover {
+  opacity: 1;
 }
 
 ul {
