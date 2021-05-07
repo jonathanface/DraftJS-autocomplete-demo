@@ -20,10 +20,13 @@
   },
   "dependencies": {
     "@babel/plugin-proposal-class-properties": "^7.10.4",
+    "browserify": "^17.0.0",
     "draft-js": "^0.11.6",
     "draftjs-utils": "^0.10.2",
     "react": "^16.13.1",
     "react-dom": "^16.13.1",
+    "ua-parser-js": ">=0.7.24",
+    "uglify-js": "^3.13.5",
     "uglifyjs": "^2.4.11"
   },
   "repository": {
